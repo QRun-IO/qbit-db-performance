@@ -5,6 +5,7 @@ All notable changes are documented here. This project follows Keep a Changelog a
 ## [Unreleased]
 
 ### Fixed
+- Each table has its own icon (the app icon is now `storage`), so nav entries are distinguishable and do not repeat icons used elsewhere.
 - Home tables keep at most four columns with plain headers (readable at every width): secondary facts such as calls and mean time, the session's query text, and a unit's kind and top table move into a second line of the first cell.
 
 ### Added

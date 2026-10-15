@@ -23,6 +23,7 @@ package com.kingsrook.qbits.dbperformance.metadata;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import com.kingsrook.qbits.dbperformance.DbPerfPermissions;
 import com.kingsrook.qbits.dbperformance.DbPerfQBitConfig;
 import com.kingsrook.qbits.dbperformance.model.DbPerfActivitySample;
@@ -669,7 +670,7 @@ public final class DbPerfMetaData
       child(instance, "db_perf_statement", "db_perf_finding", "statementId");
       child(instance, "db_perf_table_stat", "db_perf_finding", "tableStatId");
       child(instance, "db_perf_statement", "db_perf_explain", "statementId");
-      QAppMetaData app = new QAppMetaData().withName(config.getAppName()).withLabel("Database Performance").withIcon(new QIcon("speed"))
+      QAppMetaData app = new QAppMetaData().withName(config.getAppName()).withLabel("Database Performance").withIcon(new QIcon("storage"))
          .withPermissionRules(DbPerfPermissions.rules(config.getPermissionBaseName() + ".view"))
          .withSection(new QAppSection().withName("data").withLabel("Data").withIcon(new QIcon("table_rows"))
             .withTables(List.of("db_perf_finding", "db_perf_statement", "db_perf_table_stat", "db_perf_index_stat", "db_perf_snapshot", "db_perf_settings", "db_perf_rule")));
@@ -682,11 +683,35 @@ public final class DbPerfMetaData
 
 
    /*******************************************************************************
+    ** A distinct icon per table, so nav entries are told apart at a glance.
+    *******************************************************************************/
+   static final Map<String, String> TABLE_ICONS = Map.ofEntries(
+      Map.entry("db_perf_finding", "tips_and_updates"),
+      Map.entry("db_perf_statement", "query_stats"),
+      Map.entry("db_perf_table_stat", "grid_on"),
+      Map.entry("db_perf_index_stat", "bookmarks"),
+      Map.entry("db_perf_snapshot", "photo_camera"),
+      Map.entry("db_perf_settings", "settings_suggest"),
+      Map.entry("db_perf_rule", "playlist_add_check"),
+      Map.entry("db_perf_explain", "device_hub"),
+      Map.entry("db_perf_query_snapshot", "timeline"),
+      Map.entry("db_perf_query_daily", "calendar_month"),
+      Map.entry("db_perf_table_snapshot", "stacked_line_chart"),
+      Map.entry("db_perf_table_daily", "date_range"),
+      Map.entry("db_perf_activity_sample", "monitor_heart"),
+      Map.entry("db_perf_connection_sample", "lan"),
+      Map.entry("db_perf_attribution", "hub"),
+      Map.entry("db_perf_attribution_daily", "event_note"),
+      Map.entry("db_perf_repeat_pattern", "repeat"));
+
+
+
+   /*******************************************************************************
     ** Common storage, permissions and write guard.
     *******************************************************************************/
    private static QTableMetaData base(DbPerfQBitConfig config, String name, String label, Class<? extends QRecordEntity> entity) throws QException
    {
-      QTableMetaData table = new QTableMetaData().withName(name).withLabel(label).withIcon(new QIcon("speed"))
+      QTableMetaData table = new QTableMetaData().withName(name).withLabel(label).withIcon(new QIcon(TABLE_ICONS.getOrDefault(name, "table_rows")))
          .withBackendName(config.getBackendName()).withBackendDetails(new RDBMSTableBackendDetails().withTableName(name))
          .withPrimaryKeyField("id").withFieldsFromEntity(entity)
          .withPermissionRules(DbPerfPermissions.rules(config.getPermissionBaseName() + ".view"));
