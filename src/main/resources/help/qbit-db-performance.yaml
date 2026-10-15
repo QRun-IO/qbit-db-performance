@@ -388,6 +388,8 @@ entries:
   summary: "Largest repetition count for one fingerprint in a single sampled unit of work."
 - key: table:db_perf_repeat_pattern;field:totalRepeats
   summary: "Total repeats reported for this repeat pattern record."
+- key: table:db_perf_repeat_pattern;field:sampleRate
+  summary: "Share of units of work that were measured in this window (1 means all)."
 - key: table:db_perf_rule;slot:help
   summary: "Editable thresholds and severity for each suggestion rule."
   content: |

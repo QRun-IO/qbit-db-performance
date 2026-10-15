@@ -4,7 +4,7 @@ Database performance for QQQ apps: PostgreSQL statement deltas, table and index 
 
 ## Requirements
 
-- Java 21 and QQQ **4.1.0-RC.11+**.
+- Java 21 and QQQ **4.1.0-RC.13+** (the statement execution listener SPI used for QQQ attribution).
 - PostgreSQL **13+**; **16+** for parameterized generic plans, with the pgJDBC driver (built against 42.7.14).
 - `pg_stat_statements` preloaded, created in the monitored database, and readable by the application role.
 - `pg_read_all_stats` granted to that role for complete statistics and other sessions' visibility.

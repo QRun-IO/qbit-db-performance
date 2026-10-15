@@ -605,3 +605,7 @@ INSERT INTO db_perf_rule (code,label,description,enabled,severity,threshold_1,th
 SELECT 'TEMP_SPILL', 'Temporary disk spill', 'Statements that write temporary files because sorts or hashes do not fit in work_mem.', TRUE, 'WARNING', 100, 'Temporary data written per day (MB)', NULL, NULL WHERE NOT EXISTS (SELECT 1 FROM db_perf_rule WHERE code = 'TEMP_SPILL');
 INSERT INTO db_perf_rule (code,label,description,enabled,severity,threshold_1,threshold_1_label,threshold_2,threshold_2_label)
 SELECT 'DEADLOCKS', 'Deadlocks', 'Transactions that deadlocked and were cancelled by PostgreSQL. Usually two code paths that lock rows in a different order.', TRUE, 'WARNING', 1, 'Deadlocks per day', NULL, NULL WHERE NOT EXISTS (SELECT 1 FROM db_perf_rule WHERE code = 'DEADLOCKS');
+
+-- changeset qbit-db-performance:34
+-- comment: Repeated Statements: the sampling rate of each window, so repeat counts can be read at scale.
+ALTER TABLE db_perf_repeat_pattern ADD COLUMN IF NOT EXISTS sample_rate DECIMAL(5,4);
