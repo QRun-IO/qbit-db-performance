@@ -48,6 +48,7 @@ import com.kingsrook.qbits.dbperformance.provider.ProviderCapabilities;
 import com.kingsrook.qbits.dbperformance.provider.SessionInfo;
 import com.kingsrook.qbits.dbperformance.provider.StatementStats;
 import com.kingsrook.qbits.dbperformance.provider.TableStats;
+import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
@@ -55,6 +56,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.ConnectionManager;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaData;
+import static com.kingsrook.qqq.backend.core.logging.LogUtils.logPair;
 
 
 /*******************************************************************************
@@ -62,6 +64,8 @@ import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaDat
  *******************************************************************************/
 public class SnapshotCollector
 {
+   private static final QLogger LOG = QLogger.getLogger(SnapshotCollector.class);
+
    private final DbPerfRuntime runtime;
    private final Clock clock;
    private final DbStatsProvider providerOverride;
@@ -104,6 +108,7 @@ public class SnapshotCollector
                throw (new IllegalArgumentException("Backend is not configured for this runtime"));
             }
             QRecord settings = new DbPerfSettingsService(runtime).ensure(backendName);
+            failAbandonedRuns(backendName, settings);
             QRecord inserted = runtime.asSystem(() -> DbPerfStore.insert("db_perf_snapshot", List.of(snapshot)).getFirst());
             snapshot.setValue("id", inserted.getValueInteger("id"));
             runtime.transaction(() ->
@@ -121,9 +126,19 @@ public class SnapshotCollector
                return (null);
             });
          }
-         catch(Exception e)
+         catch(Throwable e)
          {
-            // Never persist a JDBC exception message: it may contain SQL literals.
+            //////////////////////////////////////////////////////////////////////////
+            // Errors too (a StackOverflowError once left runs RUNNING with no log). //
+            // Never persist or log a JDBC exception message: it may contain SQL    //
+            // literals. The class and the throwing frame identify the cause.       //
+            //////////////////////////////////////////////////////////////////////////
+            if(e instanceof OutOfMemoryError outOfMemory)
+            {
+               throw (outOfMemory);
+            }
+            LOG.error("Database performance snapshot failed", logPair("backend", backendName), logPair("snapshotId", snapshot.getValueInteger("id")),
+               logPair("exception", e.getClass().getName()), logPair("at", e.getStackTrace().length == 0 ? null : e.getStackTrace()[0].toString()));
             snapshot.withValue("status", "FAILED").withValue("errorMessage", "Collection failed (" + e.getClass().getSimpleName() + "). Check database connectivity, schema and statistics access.")
                .withValue("durationMs", (int) Math.min(Integer.MAX_VALUE, (System.nanoTime() - started) / 1000000));
             if(snapshot.getValueInteger("id") != null)
@@ -147,6 +162,33 @@ public class SnapshotCollector
          return (snapshot);
       }
    }
+
+
+   /*******************************************************************************
+    ** Runs left RUNNING by a crashed pod or an earlier failure are closed as
+    ** FAILED once they are older than three collection intervals.
+    *******************************************************************************/
+   private void failAbandonedRuns(String backendName, QRecord settings) throws Exception
+   {
+      int     interval = positive(settings, "snapshotIntervalMinutes", 5);
+      Instant cutoff   = clock.instant().minus(Duration.ofMinutes(3L * interval));
+      List<QRecord> abandoned = runtime.asSystem(() -> DbPerfStore.query("db_perf_snapshot", DbPerfStore.eq("backendName", backendName)
+         .withCriteria(new QFilterCriteria("status", QCriteriaOperator.EQUALS, "RUNNING"))
+         .withCriteria(new QFilterCriteria("capturedAt", QCriteriaOperator.LESS_THAN, cutoff))));
+      if(abandoned.isEmpty())
+      {
+         return;
+      }
+      List<QRecord> updates = abandoned.stream().map(row -> new QRecord().withValue("id", row.getValueInteger("id")).withValue("status", "FAILED")
+         .withValue("errorMessage", "Collection did not finish (the run was interrupted or its pod stopped).")).toList();
+      runtime.asSystem(() ->
+      {
+         DbPerfStore.update("db_perf_snapshot", updates);
+         return (null);
+      });
+      LOG.warn("Closed abandoned database performance snapshots", logPair("backend", backendName), logPair("count", updates.size()));
+   }
+
 
 
    /*******************************************************************************

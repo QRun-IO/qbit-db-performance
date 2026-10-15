@@ -5,6 +5,7 @@ All notable changes are documented here. This project follows Keep a Changelog a
 ## [Unreleased]
 
 ### Fixed
+- Collection no longer stops at RUNNING on large production statement sets: list folding in the SQL normalizer is a linear token scan (the nested-repetition regular expressions overflowed the stack on 60 KB statements with long IN/VALUES lists). Any failure, including an `Error`, now closes the run as FAILED with the exception class, logs it at ERROR (class and frame only, never SQL text) and raises the collection alert; runs left RUNNING by a crash are closed as FAILED after three intervals.
 - Only one runtime attributes per JVM: starting attribution on a newer instance (a hot swap, or repeated server starts in tests) stops the previous one, so old instances are never pinned by a forgotten listener and flusher.
 - Each table has its own icon (the app icon is now `storage`), so nav entries are distinguishable and do not repeat icons used elsewhere.
 - Home tables keep at most four columns with plain headers (readable at every width): secondary facts such as calls and mean time, the session's query text, and a unit's kind and top table move into a second line of the first cell.

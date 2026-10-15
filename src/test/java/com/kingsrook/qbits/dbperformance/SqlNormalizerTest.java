@@ -86,6 +86,14 @@ class SqlNormalizerTest
       assertThat(SqlNormalizer.mainTable("select 1")).isNull();
       assertThat(SqlNormalizer.normalize("select \"in ( ? , ? )\" from t")).isEqualTo("select \"in ( ? , ? )\" from t");
       assertThat(SqlNormalizer.normalize(null)).isEmpty();
+      ///////////////////////////////////////////////////////////////////////
+      // huge lists (production had 60 KB statements) must not overflow    //
+      ///////////////////////////////////////////////////////////////////////
+      String hugeIn = "select * from t where id in (" + "$1, ".repeat(20000) + "$1)";
+      assertThat(SqlNormalizer.normalize(hugeIn)).isEqualTo("select * from t where id in ( ? )");
+      String hugeValues = "insert into t (a, b) values " + "($1, $2), ".repeat(20000) + "($1, $2)";
+      assertThat(SqlNormalizer.normalize(hugeValues)).isEqualTo("insert into t ( a , b ) values ( ? , ? )");
+      assertThat(SqlNormalizer.normalize("select * from t where id in (1, x)")).isEqualTo("select * from t where id in ( ? , x )");
       assertThat(SqlNormalizer.normalize(" ")).isEmpty();
       assertThat(SqlNormalizer.normalize("select " + "field, ".repeat(5000))).hasSize(10000);
    }

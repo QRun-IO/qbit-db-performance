@@ -124,6 +124,37 @@ class SnapshotCollectorTest
 
 
    /*******************************************************************************
+    ** An Error (not just an Exception) still closes the run as FAILED, and runs
+    ** left RUNNING by an earlier crash are closed once they are stale.
+    *******************************************************************************/
+   @Test
+   void errorsAndAbandonedRuns() throws Exception
+   {
+      QInstance             instance = DbPerfTestSupport.instance();
+      DbPerfRuntime         runtime  = DbPerfRuntime.of(instance);
+      DbPerfFixtureProvider provider = new DbPerfFixtureProvider();
+      runtime.asSystem(() -> DbPerfStore.insert("db_perf_snapshot", List.of(new QRecord().withValue("backendName", runtime.getConfig().getBackendName())
+         .withValue("capturedAt", DbPerfFixtureProvider.START.minusSeconds(3600)).withValue("status", "RUNNING"))));
+
+      provider.error = new StackOverflowError();
+      QRecord failed = collect(runtime, provider, 0, true);
+      assertThat(failed.getValueString("status")).isEqualTo("FAILED");
+      assertThat(failed.getValueString("errorMessage")).contains("StackOverflowError");
+      runtime.asSystem(() ->
+      {
+         List<QRecord> rows = DbPerfStore.query("db_perf_snapshot", new QQueryFilter());
+         assertThat(rows).hasSize(2).allSatisfy(row -> assertThat(row.getValueString("status")).isEqualTo("FAILED"));
+         assertThat(rows).anySatisfy(row -> assertThat(row.getValueString("errorMessage")).contains("did not finish"));
+         return (null);
+      });
+
+      provider.error = null;
+      assertThat(collect(runtime, provider, 300, true).getValueString("status")).isEqualTo("OK");
+   }
+
+
+
+   /*******************************************************************************
     ** H2 remains usable and explicitly unsupported by the production selector.
     *******************************************************************************/
    @Test
