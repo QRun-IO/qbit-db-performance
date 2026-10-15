@@ -42,6 +42,12 @@ public class DbPerfRuntime implements QSupplementalInstanceMetaData
    private final DbPerfQBitConfig config;
    private AttributionFlusher attributionFlusher;
 
+   /////////////////////////////////////////////////////////////////////////////
+   // statement listeners are JVM-wide: only one runtime attributes at a time //
+   // (a newer instance, e.g. after a hot swap or in tests, replaces the old) //
+   /////////////////////////////////////////////////////////////////////////////
+   private static final AtomicReference<DbPerfRuntime> ACTIVE_ATTRIBUTION = new AtomicReference<>();
+
 
    /*******************************************************************************
     ** Runtime bound to a single host instance.
@@ -149,6 +155,11 @@ public class DbPerfRuntime implements QSupplementalInstanceMetaData
    {
       if(attributionFlusher == null && Boolean.TRUE.equals(config.getAttributionEnabled()))
       {
+         DbPerfRuntime previous = ACTIVE_ATTRIBUTION.getAndSet(this);
+         if(previous != null && previous != this)
+         {
+            previous.stopAttribution();
+         }
          attributionFlusher = new AttributionFlusher(this);
          attributionFlusher.start();
       }
@@ -160,6 +171,7 @@ public class DbPerfRuntime implements QSupplementalInstanceMetaData
     *******************************************************************************/
    public synchronized void stopAttribution()
    {
+      ACTIVE_ATTRIBUTION.compareAndSet(this, null);
       if(attributionFlusher != null)
       {
          attributionFlusher.close();
