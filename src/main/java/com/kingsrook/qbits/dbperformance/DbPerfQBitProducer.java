@@ -23,7 +23,14 @@ package com.kingsrook.qbits.dbperformance;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.kingsrook.qbits.dbperformance.alerts.SnapshotEvaluator;
+import com.kingsrook.qbits.dbperformance.api.DbPerformanceUiApi;
+import com.kingsrook.qbits.dbperformance.explain.QueryPlanProcess;
+import com.kingsrook.qbits.dbperformance.health.DbPerfHealthChecks;
+import com.kingsrook.qbits.dbperformance.metadata.DbPerfHelp;
 import com.kingsrook.qbits.dbperformance.metadata.DbPerfMetaData;
+import com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses;
+import com.kingsrook.qbits.dbperformance.widgets.DbPerfWidgets;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
@@ -137,11 +144,13 @@ public class DbPerfQBitProducer implements QBitMetaDataProducer<DbPerfQBitConfig
       instance.addQBit(getQBitMetaData());
       DbPerfMetaData.addTo(instance, qBitConfig);
       new DbPerfRuntime(instance, qBitConfig).addSelfToInstance(instance);
-      com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses.addTo(instance, qBitConfig);
-      com.kingsrook.qbits.dbperformance.explain.QueryPlanProcess.register(instance, qBitConfig);
+      DbPerfProcesses.addTo(instance, qBitConfig);
+      SnapshotEvaluator.register(instance, qBitConfig);
+      DbPerfHealthChecks.register(instance);
+      QueryPlanProcess.register(instance, qBitConfig);
       registerUiApi(instance);
-      com.kingsrook.qbits.dbperformance.widgets.DbPerfWidgets.register(instance, qBitConfig);
-      com.kingsrook.qbits.dbperformance.metadata.DbPerfHelp.register(instance, qBitConfig);
+      DbPerfWidgets.register(instance, qBitConfig);
+      DbPerfHelp.register(instance, qBitConfig);
       return (new MetaDataProducerMultiOutput());
    }
 
@@ -153,7 +162,7 @@ public class DbPerfQBitProducer implements QBitMetaDataProducer<DbPerfQBitConfig
       try
       {
          Class.forName("com.kingsrook.qqq.middleware.javalin.specs.extensions.MiddlewareSpecExtensionsMetaData");
-         com.kingsrook.qbits.dbperformance.api.DbPerformanceUiApi.register(instance);
+         DbPerformanceUiApi.register(instance);
       }
       catch(ClassNotFoundException e)
       {

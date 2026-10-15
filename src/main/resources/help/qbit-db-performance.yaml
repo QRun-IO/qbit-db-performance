@@ -944,3 +944,27 @@ entries:
     Requires manage settings permission. Review every changed value before applying the standard QQQ action. Changes affect subsequent collection or analysis; they do not change the monitored database schema.
 - key: possibleValueSource:db_perf_ExplainRequestMode;slot:help
   summary: PLAN inspects the query; ANALYZE executes a guarded read-only SELECT with separate permission.
+- key: process:dbPerfAnalyze;slot:help
+  summary: "Scheduled run of the suggestion rules that creates, updates and resolves findings."
+  content: |
+    Runs hourly by default. Each enabled rule in Suggestion Rules reads the stored statistics and produces findings with evidence. A rerun updates existing findings instead of adding new ones, resolves findings that are no longer detected, and never changes Ignored findings. It never changes the live database.
+- key: process:dbPerfAnalyzeNow;slot:help
+  summary: "Run the suggestion rules now instead of waiting for the hourly run."
+  content: |
+    Needs the manage settings permission. The result shows new, updated and resolved findings per rule. Run {{label:dbPerfCollectNow}} first if the statistics are old.
+- key: process:dbPerfFindingACKNOWLEDGED;slot:help
+  summary: "Mark the selected findings as acknowledged: seen and being worked on."
+  content: |
+    Acknowledged findings stay on the list and are still updated with new evidence. They resolve automatically when no longer detected.
+- key: process:dbPerfFindingRESOLVED;slot:help
+  summary: "Mark the selected findings as resolved."
+  content: |
+    Use after shipping the fix. If the rule detects the problem again, the finding reopens.
+- key: process:dbPerfFindingIGNORED;slot:help
+  summary: "Ignore the selected findings; a note saying why is required."
+  content: |
+    Ignored findings are never reopened or resolved automatically. Use Reopen to bring one back.
+- key: process:dbPerfFindingOPEN;slot:help
+  summary: "Reopen the selected findings."
+  content: |
+    Returns acknowledged, resolved or ignored findings to Open so the rules manage them again.
