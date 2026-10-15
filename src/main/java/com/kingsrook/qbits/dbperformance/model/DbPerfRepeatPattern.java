@@ -21,6 +21,7 @@
 package com.kingsrook.qbits.dbperformance.model;
 
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import com.kingsrook.qqq.backend.core.model.data.QField;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
@@ -72,6 +73,9 @@ public class DbPerfRepeatPattern extends QRecordEntity
 
    @QField
    private Long totalRepeats;
+
+   @QField
+   private BigDecimal sampleRate;
 
 
    /*******************************************************************************
@@ -451,6 +455,33 @@ public class DbPerfRepeatPattern extends QRecordEntity
    public DbPerfRepeatPattern withTotalRepeats(Long totalRepeats)
    {
       this.totalRepeats = totalRepeats;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Getter for sampleRate.
+    *******************************************************************************/
+   public BigDecimal getSampleRate()
+   {
+      return (sampleRate);
+   }
+
+
+   /*******************************************************************************
+    ** Setter for sampleRate.
+    *******************************************************************************/
+   public void setSampleRate(BigDecimal sampleRate)
+   {
+      this.sampleRate = sampleRate;
+   }
+
+
+   /*******************************************************************************
+    ** Fluent setter for sampleRate.
+    *******************************************************************************/
+   public DbPerfRepeatPattern withSampleRate(BigDecimal sampleRate)
+   {
+      this.sampleRate = sampleRate;
       return (this);
    }
 }

@@ -23,10 +23,12 @@ package com.kingsrook.qbits.dbperformance;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.kingsrook.qbits.dbperformance.attribution.AttributionRuntimeService;
 import com.kingsrook.qbits.dbperformance.metadata.DbPerfMetaData;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitConfigValidationException;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaDataProducer;
@@ -137,6 +139,7 @@ public class DbPerfQBitProducer implements QBitMetaDataProducer<DbPerfQBitConfig
       instance.addQBit(getQBitMetaData());
       DbPerfMetaData.addTo(instance, qBitConfig);
       new DbPerfRuntime(instance, qBitConfig).addSelfToInstance(instance);
+      instance.withRuntimeService(new QCodeReference(AttributionRuntimeService.class));
       com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses.addTo(instance, qBitConfig);
       return (new MetaDataProducerMultiOutput());
    }

@@ -605,3 +605,7 @@ INSERT INTO db_perf_rule (code,label,description,enabled,severity,threshold_1,th
 SELECT 'TEMP_SPILL', 'Temporary disk spill', 'Temporary disk spill.', TRUE, 'WARNING', 100, 'Temporary data per "day" (MB)', NULL, NULL WHERE NOT EXISTS (SELECT 1 FROM db_perf_rule WHERE code = 'TEMP_SPILL');
 INSERT INTO db_perf_rule (code,label,description,enabled,severity,threshold_1,threshold_1_label,threshold_2,threshold_2_label)
 SELECT 'DEADLOCKS', 'Deadlocks', 'Deadlocks.', TRUE, 'WARNING', 1, 'Deadlocks per "day"', NULL, NULL WHERE NOT EXISTS (SELECT 1 FROM db_perf_rule WHERE code = 'DEADLOCKS');
+
+-- changeset qbit-db-performance:b2-repeat-sampling
+-- comment: Preserve the sampling rate on repeated-statement windows.
+ALTER TABLE db_perf_repeat_pattern ADD COLUMN IF NOT EXISTS sample_rate DECIMAL(5,4);

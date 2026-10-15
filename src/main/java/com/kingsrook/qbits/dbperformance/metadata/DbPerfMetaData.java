@@ -549,9 +549,10 @@ public final class DbPerfMetaData
       repeatPattern.getField("unitsAffected").setBackendName("units_affected");
       repeatPattern.getField("maxRepeats").setBackendName("max_repeats");
       repeatPattern.getField("totalRepeats").setBackendName("total_repeats");
+      repeatPattern.getField("sampleRate").setBackendName("sample_rate");
       repeatPattern.withoutCapabilities(Capability.TABLE_INSERT, Capability.TABLE_UPDATE, Capability.TABLE_DELETE);
       repeatPattern.withSection(new QFieldSection("identity", new QIcon("table_rows"), Tier.T1, List.of("id", "windowStart", "windowEnd", "podName", "unitKind", "unitName", "processName")));
-      repeatPattern.withSection(new QFieldSection("details", new QIcon("table_rows"), Tier.T2, List.of("tableName", "fingerprint", "sqlText", "unitsAffected", "maxRepeats", "totalRepeats")));
+      repeatPattern.withSection(new QFieldSection("details", new QIcon("table_rows"), Tier.T2, List.of("tableName", "fingerprint", "sqlText", "unitsAffected", "maxRepeats", "totalRepeats", "sampleRate")));
       instance.addTable(repeatPattern);
 
       QTableMetaData finding = base(config, DbPerfFinding.TABLE_NAME, "Findings", DbPerfFinding.class);

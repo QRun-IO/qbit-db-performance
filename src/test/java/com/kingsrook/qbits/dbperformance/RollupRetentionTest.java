@@ -112,6 +112,9 @@ class RollupRetentionTest
       }
       rows.add(new QRecord().withValue("windowStart", now.minusSeconds(2 * 86400)).withValue("unitName", "boundary"));
       DbPerfStore.insert("db_perf_attribution", rows);
+      DbPerfStore.insert("db_perf_repeat_pattern", List.of(
+         new QRecord().withValue("windowStart", now.minusSeconds(3 * 86400)),
+         new QRecord().withValue("windowStart", now.minusSeconds(2 * 86400))));
       DbPerfStore.insert("db_perf_attribution_daily", List.of(new QRecord().withValue("day", LocalDate.of(2026, 9, 20)).withValue("rollupKey", "old")));
       int rule = DbPerfStore.query("db_perf_rule", new QQueryFilter()).getFirst().getValueInteger("id");
       List<QRecord> findings = new ArrayList<>();
@@ -121,8 +124,9 @@ class RollupRetentionTest
       }
       DbPerfStore.insert("db_perf_finding", findings);
       RetentionService retention = new RetentionService(runtime, Clock.fixed(now, ZoneOffset.UTC));
-      assertThat(retention.purge()).isEqualTo(1008);
+      assertThat(retention.purge()).isEqualTo(1009);
       assertThat(retention.purge()).isZero();
+      assertThat(DbPerfStore.query("db_perf_repeat_pattern", new QQueryFilter())).hasSize(1);
       assertThat(DbPerfStore.query("db_perf_attribution", new QQueryFilter())).singleElement().satisfies(row -> assertThat(row.getValueString("unitName")).isEqualTo("boundary"));
       assertThat(DbPerfStore.query("db_perf_finding", new QQueryFilter())).extracting(row -> row.getValueString("status")).containsExactlyInAnyOrder("OPEN", "ACKNOWLEDGED");
    }

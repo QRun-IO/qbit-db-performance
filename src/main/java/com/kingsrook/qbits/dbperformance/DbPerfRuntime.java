@@ -22,6 +22,7 @@ package com.kingsrook.qbits.dbperformance;
 
 
 import java.util.concurrent.atomic.AtomicReference;
+import com.kingsrook.qbits.dbperformance.attribution.AttributionFlusher;
 import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.context.CapturedContext;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -39,6 +40,7 @@ public class DbPerfRuntime implements QSupplementalInstanceMetaData
    public static final String NAME = "dbPerformance";
    private final QInstance instance;
    private final DbPerfQBitConfig config;
+   private AttributionFlusher attributionFlusher;
 
 
    /*******************************************************************************
@@ -137,6 +139,32 @@ public class DbPerfRuntime implements QSupplementalInstanceMetaData
             }
          }
       }));
+   }
+
+
+   /*******************************************************************************
+    ** Called by the launcher, or explicitly by hosts without a launcher.
+    *******************************************************************************/
+   public synchronized void startAttribution()
+   {
+      if(attributionFlusher == null && Boolean.TRUE.equals(config.getAttributionEnabled()))
+      {
+         attributionFlusher = new AttributionFlusher(this);
+         attributionFlusher.start();
+      }
+   }
+
+
+   /*******************************************************************************
+    ** Stop the per-instance listener and its daemon; safe to call repeatedly.
+    *******************************************************************************/
+   public synchronized void stopAttribution()
+   {
+      if(attributionFlusher != null)
+      {
+         attributionFlusher.close();
+         attributionFlusher = null;
+      }
    }
 
 
