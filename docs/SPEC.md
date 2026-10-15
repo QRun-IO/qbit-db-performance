@@ -230,11 +230,11 @@ batches, so a rerun after a crash never double counts. Each pass also writes its
 `db_perf_snapshot` row (status, duration, error), which is the report even where the host runs
 scheduled processes inline.
 
-**Alerts** (core `QAlerts`; delivered by qbit-alerts when installed, logged otherwise; keyed, and
-resolved when clear): `db_perf.collection_failed`, `db_perf.query_spike` (a statement's total time
+**Alerts** (core `QAlerts`, type names use `dbperf.` because core rejects underscores in alert type names; delivered by qbit-alerts when installed, logged otherwise; keyed, and
+resolved when clear): `dbperf.collection_failed`, `dbperf.query_spike` (a statement's total time
 in an interval above `spike_factor` × its 7-day interval median and above a floor),
-`db_perf.connection_saturation` (connections ≥ `connection_alert_percent` of `max_connections`),
-`db_perf.blocked_chain` (a session blocked longer than `blocked_alert_seconds`).
+`dbperf.connection_saturation` (connections ≥ `connection_alert_percent` of `max_connections`),
+`dbperf.blocked_chain` (a session blocked longer than `blocked_alert_seconds`).
 
 **Health** (core health SPI, Admin → Health): `db_performance.collector` (last successful snapshot
 age vs interval), `db_performance.stats_access` (pg_stat_statements present, `pg_read_all_stats`
