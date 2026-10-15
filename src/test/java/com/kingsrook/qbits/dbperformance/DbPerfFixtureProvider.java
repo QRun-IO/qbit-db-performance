@@ -47,6 +47,7 @@ public class DbPerfFixtureProvider extends UnsupportedStatsProvider
    public Instant reset = START.minusSeconds(3600);
    public boolean limited;
    public boolean fail;
+   public Error   error;
 
 
    /*******************************************************************************
@@ -85,6 +86,10 @@ public class DbPerfFixtureProvider extends UnsupportedStatsProvider
    @Override
    public List<StatementStats> readStatements(Connection connection)
    {
+      if(error != null)
+      {
+         throw (error);
+      }
       return (List.of(new StatementStats(1, "app", true, "select * from public.accounts where id=$1", calls, BigDecimal.valueOf(calls * 10), BigDecimal.TEN, BigDecimal.valueOf(15), calls, calls * 9, calls, 0, reset, reset),
          new StatementStats(2, "app", true, "select * from public.accounts where name='private'", calls, BigDecimal.valueOf(calls * 5), BigDecimal.valueOf(5), BigDecimal.TEN, calls, calls, calls, 2, reset, reset)));
    }

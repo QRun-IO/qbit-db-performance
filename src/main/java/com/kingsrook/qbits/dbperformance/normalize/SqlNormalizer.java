@@ -24,7 +24,10 @@ package com.kingsrook.qbits.dbperformance.normalize;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -200,10 +203,84 @@ public final class SqlNormalizer
     *******************************************************************************/
    private static String collapseLists(String normalized)
    {
-      normalized = normalized.replaceAll("\\bin \\( \\?(?: , \\?)* \\)", "in ( ? )");
-      normalized = normalized.replaceAll("\\bvalues (\\( \\?(?: , \\?)* \\))(?: , \\( \\?(?: , \\?)* \\))+", "values $1");
-      return (normalized);
+      ///////////////////////////////////////////////////////////////////////////
+      // a linear scan over the space-separated tokens: regular expressions    //
+      // with nested repetition overflow the stack on very long IN and VALUES  //
+      // lists (seen with 60 KB statements in production)                      //
+      ///////////////////////////////////////////////////////////////////////////
+      ////////////////////////////////////////////////////////////////////////
+      // segments between quoted identifiers keep their edge spaces          //
+      ////////////////////////////////////////////////////////////////////////
+      String trimmed = normalized.strip();
+      if(trimmed.isEmpty())
+      {
+         return (normalized);
+      }
+      String       leading  = normalized.substring(0, normalized.indexOf(trimmed.charAt(0)));
+      String       trailing = normalized.substring(leading.length() + trimmed.length());
+      String[]     tokens   = trimmed.split(" ");
+      List<String> out    = new ArrayList<>(tokens.length);
+      int          i      = 0;
+      while(i < tokens.length)
+      {
+         String token = tokens[i];
+         if("in".equals(token))
+         {
+            int end = placeholderGroupEnd(tokens, i + 1);
+            if(end > 0)
+            {
+               out.addAll(List.of("in", "(", "?", ")"));
+               i = end;
+               continue;
+            }
+         }
+         if("values".equals(token))
+         {
+            int first = placeholderGroupEnd(tokens, i + 1);
+            if(first > 0)
+            {
+               int end = first;
+               while(end + 1 < tokens.length && ",".equals(tokens[end]))
+               {
+                  int next = placeholderGroupEnd(tokens, end + 1);
+                  if(next < 0)
+                  {
+                     break;
+                  }
+                  end = next;
+               }
+               out.add("values");
+               out.addAll(Arrays.asList(tokens).subList(i + 1, first));
+               i = end;
+               continue;
+            }
+         }
+         out.add(token);
+         i++;
+      }
+      return (leading + String.join(" ", out) + trailing);
    }
+
+
+
+   /*******************************************************************************
+    ** If tokens[start] opens "( ? , ? ... )" made only of placeholders, the index
+    ** just after its ")"; otherwise -1.
+    *******************************************************************************/
+   private static int placeholderGroupEnd(String[] tokens, int start)
+   {
+      if(start + 2 >= tokens.length || !"(".equals(tokens[start]) || !"?".equals(tokens[start + 1]))
+      {
+         return (-1);
+      }
+      int i = start + 2;
+      while(i + 1 < tokens.length && ",".equals(tokens[i]) && "?".equals(tokens[i + 1]))
+      {
+         i += 2;
+      }
+      return (i < tokens.length && ")".equals(tokens[i]) ? i + 1 : -1);
+   }
+
 
 
    /*******************************************************************************
