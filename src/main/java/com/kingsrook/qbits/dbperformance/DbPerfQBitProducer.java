@@ -23,8 +23,15 @@ package com.kingsrook.qbits.dbperformance;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.kingsrook.qbits.dbperformance.alerts.SnapshotEvaluator;
+import com.kingsrook.qbits.dbperformance.api.DbPerformanceUiApi;
 import com.kingsrook.qbits.dbperformance.attribution.AttributionRuntimeService;
+import com.kingsrook.qbits.dbperformance.explain.QueryPlanProcess;
+import com.kingsrook.qbits.dbperformance.health.DbPerfHealthChecks;
+import com.kingsrook.qbits.dbperformance.metadata.DbPerfHelp;
 import com.kingsrook.qbits.dbperformance.metadata.DbPerfMetaData;
+import com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses;
+import com.kingsrook.qbits.dbperformance.widgets.DbPerfWidgets;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
@@ -140,7 +147,29 @@ public class DbPerfQBitProducer implements QBitMetaDataProducer<DbPerfQBitConfig
       DbPerfMetaData.addTo(instance, qBitConfig);
       new DbPerfRuntime(instance, qBitConfig).addSelfToInstance(instance);
       instance.withRuntimeService(new QCodeReference(AttributionRuntimeService.class));
-      com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses.addTo(instance, qBitConfig);
+      DbPerfProcesses.addTo(instance, qBitConfig);
+      SnapshotEvaluator.register(instance, qBitConfig);
+      DbPerfHealthChecks.register(instance);
+      QueryPlanProcess.register(instance, qBitConfig);
+      registerUiApi(instance);
+      DbPerfWidgets.register(instance, qBitConfig);
+      DbPerfHelp.register(instance, qBitConfig);
       return (new MetaDataProducerMultiOutput());
+   }
+
+   /*******************************************************************************
+    ** Middleware is optional for hosts that use only the core tables and collector.
+    *******************************************************************************/
+   private static void registerUiApi(QInstance instance)
+   {
+      try
+      {
+         Class.forName("com.kingsrook.qqq.middleware.javalin.specs.extensions.MiddlewareSpecExtensionsMetaData");
+         DbPerformanceUiApi.register(instance);
+      }
+      catch(ClassNotFoundException e)
+      {
+         // Core-only hosts have no HTTP API to register.
+      }
    }
 }

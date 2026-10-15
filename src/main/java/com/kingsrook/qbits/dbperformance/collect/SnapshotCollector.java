@@ -143,6 +143,7 @@ public class SnapshotCollector
                }
             }
          }
+         new com.kingsrook.qbits.dbperformance.alerts.SnapshotEvaluator(runtime).evaluate(snapshot);
          return (snapshot);
       }
    }

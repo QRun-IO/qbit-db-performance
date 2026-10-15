@@ -21,6 +21,7 @@
 package com.kingsrook.qbits.dbperformance.processes;
 
 
+import java.util.List;
 import com.kingsrook.qbits.dbperformance.DbPerfPermissions;
 import com.kingsrook.qbits.dbperformance.DbPerfQBitConfig;
 import com.kingsrook.qqq.backend.core.jobs.DurableProcessMetaData;
@@ -39,6 +40,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.processes.QFunctionInputMet
 import com.kingsrook.qqq.backend.core.model.metadata.processes.QFunctionOutputMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.processes.QProcessMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.scheduleing.QScheduleMetaData;
+import com.kingsrook.qqq.backend.core.processes.implementations.etl.streamedwithfrontend.ExtractViaQueryStep;
+import com.kingsrook.qqq.backend.core.processes.implementations.etl.streamedwithfrontend.StreamedETLWithFrontendProcess;
 
 
 /*******************************************************************************
@@ -46,6 +49,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.scheduleing.QScheduleMetaDa
  *******************************************************************************/
 public final class DbPerfProcesses
 {
+   public static final String ANALYZE = "dbPerfAnalyze";
+   public static final String ANALYZE_NOW = "dbPerfAnalyzeNow";
    public static final String COLLECT = "dbPerfCollectSnapshot";
    public static final String ROLLUP = "dbPerfRollupAndPurge";
    public static final String COLLECT_NOW = "dbPerfCollectNow";
@@ -64,6 +69,31 @@ public final class DbPerfProcesses
     *******************************************************************************/
    public static void addTo(QInstance instance, DbPerfQBitConfig config)
    {
+      instance.addProcess(scheduled(config, ANALYZE, "Analyze database performance", DbPerfAnalyzeStep.class, config.getAnalyzeCron()));
+      instance.addProcess(base(config, ANALYZE_NOW, "Analyze now", DbPerfAnalyzeStep.class, false).withTableName("db_perf_finding")
+         .withStep(new QFrontendStepMetaData().withName("result").withLabel("Result")
+            .withComponent(new QFrontendComponentMetaData().withType(QComponentType.PROCESS_SUMMARY_RESULTS))));
+      for(String status : List.of("ACKNOWLEDGED", "RESOLVED", "IGNORED", "OPEN"))
+      {
+         String label = switch(status)
+         {
+            case "ACKNOWLEDGED" -> "Acknowledge";
+            case "RESOLVED" -> "Mark resolved";
+            case "IGNORED" -> "Ignore";
+            default -> "Reopen";
+         };
+         QProcessMetaData action = StreamedETLWithFrontendProcess.processMetaDataBuilder()
+            .withName("dbPerfFinding" + status).withLabel(label).withIcon(new QIcon("done"))
+            .withTableName("db_perf_finding").withSourceTable("db_perf_finding").withDestinationTable("db_perf_finding")
+            .withExtractStepClass(ExtractViaQueryStep.class).withTransformStepClass(FindingSteps.Transform.class).withLoadStepClass(FindingSteps.Load.class)
+            .withSupportsFullValidation(true).withDoFullValidation(true).withMinInputRecords(1)
+            .withPreviewMessage("Review the selected findings before changing their status.")
+            .withFields(List.of(new QFieldMetaData(FindingSteps.TARGET, QFieldType.STRING).withDefaultValue(status))).getProcessMetaData();
+         action.withPermissionRules(DbPerfPermissions.rules(config.getPermissionBaseName() + ".manage_findings"))
+            .withStep(0, new QFrontendStepMetaData().withName("note").withLabel("Note")
+               .withFormField(new QFieldMetaData(FindingSteps.NOTE, QFieldType.STRING).withLabel("Note").withMaxLength(2000).withIsRequired("IGNORED".equals(status))));
+         instance.addProcess(action);
+      }
       instance.addProcess(scheduled(config, COLLECT, "Collect database snapshot", DbPerfCollectStep.class, config.getSnapshotCron()));
       instance.addProcess(scheduled(config, ROLLUP, "Roll up and purge database performance", DbPerfRollupStep.class, config.getRollupCron()));
       instance.addProcess(base(config, COLLECT_NOW, "Collect now", DbPerfCollectStep.class, true)
