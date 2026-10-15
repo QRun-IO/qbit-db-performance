@@ -138,6 +138,8 @@ public class DbPerfQBitProducer implements QBitMetaDataProducer<DbPerfQBitConfig
       DbPerfMetaData.addTo(instance, qBitConfig);
       new DbPerfRuntime(instance, qBitConfig).addSelfToInstance(instance);
       com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses.addTo(instance, qBitConfig);
+      com.kingsrook.qbits.dbperformance.alerts.SnapshotEvaluator.register(instance, qBitConfig);
+      com.kingsrook.qbits.dbperformance.health.DbPerfHealthChecks.register(instance);
       return (new MetaDataProducerMultiOutput());
    }
 }
