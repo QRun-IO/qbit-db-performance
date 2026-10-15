@@ -138,6 +138,26 @@ public class DbPerfQBitProducer implements QBitMetaDataProducer<DbPerfQBitConfig
       DbPerfMetaData.addTo(instance, qBitConfig);
       new DbPerfRuntime(instance, qBitConfig).addSelfToInstance(instance);
       com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses.addTo(instance, qBitConfig);
+      com.kingsrook.qbits.dbperformance.explain.QueryPlanProcess.register(instance, qBitConfig);
+      registerUiApi(instance);
+      com.kingsrook.qbits.dbperformance.widgets.DbPerfWidgets.register(instance, qBitConfig);
+      com.kingsrook.qbits.dbperformance.metadata.DbPerfHelp.register(instance, qBitConfig);
       return (new MetaDataProducerMultiOutput());
+   }
+
+   /*******************************************************************************
+    ** Middleware is optional for hosts that use only the core tables and collector.
+    *******************************************************************************/
+   private static void registerUiApi(QInstance instance)
+   {
+      try
+      {
+         Class.forName("com.kingsrook.qqq.middleware.javalin.specs.extensions.MiddlewareSpecExtensionsMetaData");
+         com.kingsrook.qbits.dbperformance.api.DbPerformanceUiApi.register(instance);
+      }
+      catch(ClassNotFoundException e)
+      {
+         // Core-only hosts have no HTTP API to register.
+      }
    }
 }

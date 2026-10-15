@@ -1,0 +1,946 @@
+bundle: qbit-db-performance
+version: ${project.version}
+layer: QBIT
+entries:
+- key: app:dbPerformance;slot:help
+  summary: "Find expensive queries, inspect query plans and review database capacity."
+  content: |
+    Start with Setup. Run {{label:dbPerfCollectNow}} from Snapshots to establish the first baseline. Two collections produce useful statement deltas. Table and index data normally refresh hourly; the dashboard refreshes every 30 to 60 seconds.
+    
+    Use {{label:dbPerfQueryPlan}} on a query to inspect its plan. PLAN does not execute the query; generic plans require PostgreSQL 16+. ANALYZE executes a read-only SELECT with a timeout and always rolls back. Parameters and ANALYZE plans are never stored. Raw live SQL is permission-gated and never persisted.
+    
+    All data lives in standard QQQ tables. The host owns scheduler registration and permissions. Attribution and findings require their corresponding runtime collectors; empty panels explain when data will arrive.
+- key: table:db_perf_activity_sample;slot:help
+  summary: "Notable session samples with normalized text, never raw query text."
+  content: |
+    The collector samples long-running, blocked and idle-in-transaction sessions every collection. Quiet databases can remain empty. Retained for detailRetentionDays (30). Use Live activity for current sessions.
+- key: table:db_perf_activity_sample;slot:emptyState
+  summary: "Notable session samples with normalized text, never raw query text."
+  content: |
+    The collector samples long-running, blocked and idle-in-transaction sessions every collection. Quiet databases can remain empty. Retained for detailRetentionDays (30). Use Live activity for current sessions.
+- key: table:db_perf_activity_sample;field:snapshotId
+  summary: "Reference to the related snapshot record."
+- key: table:db_perf_activity_sample;field:capturedAt
+  summary: "Time this database sample was captured."
+- key: table:db_perf_activity_sample;field:pid
+  summary: "Pid reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:dbUser
+  summary: "Database role associated with this statement, session or connection group."
+- key: table:db_perf_activity_sample;field:applicationName
+  summary: "Client application name reported by PostgreSQL."
+- key: table:db_perf_activity_sample;field:clientAddr
+  summary: "Client address reported by the statistics provider."
+- key: table:db_perf_activity_sample;field:state
+  summary: "State reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:waitEventType
+  summary: "PostgreSQL category of the current wait, such as Lock or IO."
+- key: table:db_perf_activity_sample;field:waitEvent
+  summary: "PostgreSQL event on which this backend is currently waiting."
+- key: table:db_perf_activity_sample;field:backendType
+  summary: "Backend type reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:xactStart
+  summary: "Xact start reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:queryStart
+  summary: "Query start reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:stateChange
+  summary: "State change reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:querySeconds
+  summary: "Age of the current query in seconds."
+- key: table:db_perf_activity_sample;field:xactSeconds
+  summary: "Age of the current transaction in seconds."
+- key: table:db_perf_activity_sample;field:blockedBy
+  summary: "Blocking process identifiers reported by PostgreSQL."
+- key: table:db_perf_activity_sample;field:blockingCount
+  summary: "Number of sessions directly blocked by this session."
+- key: table:db_perf_activity_sample;field:reason
+  summary: "Reason reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:queryId
+  summary: "PostgreSQL query identifier; fingerprint provides cross-source normalized matching."
+- key: table:db_perf_activity_sample;field:statementId
+  summary: "Reference to the related statement record."
+- key: table:db_perf_activity_sample;field:queryFingerprint
+  summary: "Query fingerprint reported for this activity sample record."
+- key: table:db_perf_activity_sample;field:queryTextNormalized
+  summary: "Query text normalized reported for this activity sample record."
+- key: table:db_perf_attribution;slot:help
+  summary: "QQQ request, process and job database time by statement shape."
+  content: |
+    The host attribution listener flushes one batch per attributionFlushSeconds (60 by default). Retained for detailRetentionDays (30). Attribution starts after the next flush; enable the listener in the host if empty.
+- key: table:db_perf_attribution;slot:emptyState
+  summary: "QQQ request, process and job database time by statement shape."
+  content: |
+    The host attribution listener flushes one batch per attributionFlushSeconds (60 by default). Retained for detailRetentionDays (30). Attribution starts after the next flush; enable the listener in the host if empty.
+- key: table:db_perf_attribution;field:windowStart
+  summary: "Beginning of the attribution aggregation window."
+- key: table:db_perf_attribution;field:windowEnd
+  summary: "End of the attribution aggregation window."
+- key: table:db_perf_attribution;field:podName
+  summary: "Application pod that observed and flushed this attribution window."
+- key: table:db_perf_attribution;field:unitKind
+  summary: "Kind of QQQ unit of work, such as route, process or scheduled job."
+- key: table:db_perf_attribution;field:unitName
+  summary: "Name of the QQQ unit responsible for database work."
+- key: table:db_perf_attribution;field:processName
+  summary: "QQQ process responsible for the attributed work, when known."
+- key: table:db_perf_attribution;field:tableName
+  summary: "Table name reported for this attribution record."
+- key: table:db_perf_attribution;field:operation
+  summary: "Normalized SQL operation, such as SELECT, INSERT, UPDATE or DELETE."
+- key: table:db_perf_attribution;field:fingerprint
+  summary: "SHA-256 of the normalized SQL shape; literals and bind values are excluded."
+- key: table:db_perf_attribution;field:sqlText
+  summary: "Normalized SQL shape without literal values. Parameter values are never stored."
+- key: table:db_perf_attribution;field:units
+  summary: "Number of sampled QQQ units contributing to this aggregate."
+- key: table:db_perf_attribution;field:statements
+  summary: "Number of attributed SQL executions during the window."
+- key: table:db_perf_attribution;field:totalMs
+  summary: "Total ms in milliseconds for this measurement."
+- key: table:db_perf_attribution;field:maxMs
+  summary: "Max ms in milliseconds for this measurement."
+- key: table:db_perf_attribution;field:rowsCount
+  summary: "Rows processed during the measured execution window."
+- key: table:db_perf_attribution;field:errors
+  summary: "Number of failed SQL executions observed in the attribution window."
+- key: table:db_perf_attribution;field:sampleRate
+  summary: "Fraction of units sampled in this attribution window."
+- key: table:db_perf_attribution_daily;slot:help
+  summary: "Daily database-time attribution for QQQ units of work."
+  content: |
+    The daily rollup aggregates flushed attribution windows at 03:15 by default. Retained for rollupRetentionDays (365). Wait for a flush and the next daily rollup when empty.
+- key: table:db_perf_attribution_daily;slot:emptyState
+  summary: "Daily database-time attribution for QQQ units of work."
+  content: |
+    The daily rollup aggregates flushed attribution windows at 03:15 by default. Retained for rollupRetentionDays (365). Wait for a flush and the next daily rollup when empty.
+- key: table:db_perf_attribution_daily;field:day
+  summary: "Calendar day in the configured qbit time zone for this rollup."
+- key: table:db_perf_attribution_daily;field:rollupKey
+  summary: "Stable identity used to replace a daily aggregate idempotently."
+- key: table:db_perf_attribution_daily;field:unitKind
+  summary: "Kind of QQQ unit of work, such as route, process or scheduled job."
+- key: table:db_perf_attribution_daily;field:unitName
+  summary: "Name of the QQQ unit responsible for database work."
+- key: table:db_perf_attribution_daily;field:processName
+  summary: "QQQ process responsible for the attributed work, when known."
+- key: table:db_perf_attribution_daily;field:tableName
+  summary: "Table name reported for this attribution daily record."
+- key: table:db_perf_attribution_daily;field:operation
+  summary: "Normalized SQL operation, such as SELECT, INSERT, UPDATE or DELETE."
+- key: table:db_perf_attribution_daily;field:fingerprint
+  summary: "SHA-256 of the normalized SQL shape; literals and bind values are excluded."
+- key: table:db_perf_attribution_daily;field:sqlText
+  summary: "Normalized SQL shape without literal values. Parameter values are never stored."
+- key: table:db_perf_attribution_daily;field:units
+  summary: "Number of sampled QQQ units contributing to this aggregate."
+- key: table:db_perf_attribution_daily;field:statements
+  summary: "Number of attributed SQL executions during the window."
+- key: table:db_perf_attribution_daily;field:totalMs
+  summary: "Total ms in milliseconds for this measurement."
+- key: table:db_perf_attribution_daily;field:maxMs
+  summary: "Max ms in milliseconds for this measurement."
+- key: table:db_perf_attribution_daily;field:rowsCount
+  summary: "Rows processed during the measured execution window."
+- key: table:db_perf_attribution_daily;field:errors
+  summary: "Number of failed SQL executions observed in the attribution window."
+- key: table:db_perf_connection_sample;slot:help
+  summary: "Connection counts grouped by application, user and state for each snapshot."
+  content: |
+    The collector writes these rows every snapshot. Retained for detailRetentionDays (30). Run Collect now or wait for the next scheduled pass when empty.
+- key: table:db_perf_connection_sample;slot:emptyState
+  summary: "Connection counts grouped by application, user and state for each snapshot."
+  content: |
+    The collector writes these rows every snapshot. Retained for detailRetentionDays (30). Run Collect now or wait for the next scheduled pass when empty.
+- key: table:db_perf_connection_sample;field:snapshotId
+  summary: "Reference to the related snapshot record."
+- key: table:db_perf_connection_sample;field:capturedAt
+  summary: "Time this database sample was captured."
+- key: table:db_perf_connection_sample;field:dbUser
+  summary: "Database role associated with this statement, session or connection group."
+- key: table:db_perf_connection_sample;field:applicationName
+  summary: "Client application name reported by PostgreSQL."
+- key: table:db_perf_connection_sample;field:state
+  summary: "State reported for this connection sample record."
+- key: table:db_perf_connection_sample;field:connectionCount
+  summary: "Connection count reported for this connection sample record."
+- key: table:db_perf_explain;slot:help
+  summary: "Audited plan requests, including denied, failed and timed-out attempts."
+  content: |
+    Query plan and the explain UI API write one audit row per service request. Only literal-free PLAN or GENERIC results may be saved; ANALYZE plans and all parameter values remain transient. Retained for detailRetentionDays (30). Run Query plan on a statement when empty.
+- key: table:db_perf_explain;slot:emptyState
+  summary: "Audited plan requests, including denied, failed and timed-out attempts."
+  content: |
+    Query plan and the explain UI API write one audit row per service request. Only literal-free PLAN or GENERIC results may be saved; ANALYZE plans and all parameter values remain transient. Retained for detailRetentionDays (30). Run Query plan on a statement when empty.
+- key: table:db_perf_explain;field:statementId
+  summary: "Reference to the related statement record."
+- key: table:db_perf_explain;field:requestedBy
+  summary: "Session user identifier that requested the plan, even for a denied request."
+- key: table:db_perf_explain;field:requestedAt
+  summary: "When the plan request was received."
+- key: table:db_perf_explain;field:mode
+  summary: "PLAN, automatically selected GENERIC, or explicitly authorized ANALYZE."
+- key: table:db_perf_explain;field:sqlFingerprint
+  summary: "SHA-256 of the normalized query in this explain audit."
+- key: table:db_perf_explain;field:sqlText
+  summary: "Normalized SQL shape without literal values. Parameter values are never stored."
+- key: table:db_perf_explain;field:parameterCount
+  summary: "Number of positional parameter slots; values are never stored."
+- key: table:db_perf_explain;field:durationMs
+  summary: "Duration ms in milliseconds for this measurement."
+- key: table:db_perf_explain;field:outcome
+  summary: "OK, ERROR, DENIED or TIMEOUT; every explain service request is audited."
+- key: table:db_perf_explain;field:errorMessage
+  summary: "Sanitized failure description. Database SQL errors and parameter values are excluded."
+- key: table:db_perf_explain;field:planJson
+  summary: "Saved PostgreSQL JSON plan, only for eligible literal-free PLAN or GENERIC requests."
+- key: table:db_perf_explain;field:planText
+  summary: "Readable indented plan tree; never stored for ANALYZE."
+- key: table:db_perf_explain;field:totalCost
+  summary: "Total cost reported for this explain record."
+- key: table:db_perf_finding;slot:help
+  summary: "Ranked, deduplicated suggestions with supporting evidence and proposed fixes."
+  content: |
+    The findings engine analyzes collected data hourly. OPEN and ACKNOWLEDGED findings remain actionable; resolved or ignored stale findings are purged after rollupRetentionDays (365). Wait for collection and the next analysis when empty. Proposed migrations require developer review; this qbit never applies them.
+- key: table:db_perf_finding;slot:emptyState
+  summary: "Ranked, deduplicated suggestions with supporting evidence and proposed fixes."
+  content: |
+    The findings engine analyzes collected data hourly. OPEN and ACKNOWLEDGED findings remain actionable; resolved or ignored stale findings are purged after rollupRetentionDays (365). Wait for collection and the next analysis when empty. Proposed migrations require developer review; this qbit never applies them.
+- key: table:db_perf_finding;field:backendName
+  summary: "The configured QQQ backend whose database is monitored."
+- key: table:db_perf_finding;field:ruleId
+  summary: "Reference to the related rule record."
+- key: table:db_perf_finding;field:ruleCode
+  summary: "Rule code reported for this finding record."
+- key: table:db_perf_finding;field:dedupeKey
+  summary: "Stable rule-plus-subject identity that updates an existing finding instead of creating duplicates."
+- key: table:db_perf_finding;field:status
+  summary: "Current lifecycle state. Review the status-specific guidance and related messages."
+- key: table:db_perf_finding;field:severity
+  summary: "Configured importance of a finding or rule; contributes to the ranking score."
+- key: table:db_perf_finding;field:score
+  summary: "Severity weight multiplied by normalized impact; larger scores rank first."
+- key: table:db_perf_finding;field:title
+  summary: "Title reported for this finding record."
+- key: table:db_perf_finding;field:summary
+  summary: "Summary reported for this finding record."
+- key: table:db_perf_finding;field:evidence
+  summary: "Measurements supporting the finding, without raw SQL values."
+- key: table:db_perf_finding;field:recommendation
+  summary: "Suggested developer or operator action; the qbit never applies it automatically."
+- key: table:db_perf_finding;field:migrationSnippet
+  summary: "Proposed Liquibase migration text for review and source control; never executed by this qbit."
+- key: table:db_perf_finding;field:subjectTable
+  summary: "Subject table associated with the finding."
+- key: table:db_perf_finding;field:statementId
+  summary: "Reference to the related statement record."
+- key: table:db_perf_finding;field:tableStatId
+  summary: "Reference to the related table stat record."
+- key: table:db_perf_finding;field:indexStatId
+  summary: "Reference to the related index stat record."
+- key: table:db_perf_finding;field:unitName
+  summary: "Name of the QQQ unit responsible for database work."
+- key: table:db_perf_finding;field:firstSeenAt
+  summary: "First recorded observation of this statement or finding."
+- key: table:db_perf_finding;field:lastSeenAt
+  summary: "Most recent observation of this statement, table, index or finding."
+- key: table:db_perf_finding;field:occurrences
+  summary: "Number of analyses in which this finding has been observed."
+- key: table:db_perf_finding;field:resolvedAt
+  summary: "When this finding was marked resolved."
+- key: table:db_perf_finding;field:statusNote
+  summary: "Human explanation for the latest finding status change."
+- key: table:db_perf_finding;field:statusChangedBy
+  summary: "User identifier responsible for the latest manual status change."
+- key: table:db_perf_index_stat;slot:help
+  summary: "Current index definitions, usage, size and uniqueness."
+  content: |
+    The collector upserts indexes with the hourly table pass. Stale indexes are purged after rollupRetentionDays (365). Run Collect now to force collection when empty.
+- key: table:db_perf_index_stat;slot:emptyState
+  summary: "Current index definitions, usage, size and uniqueness."
+  content: |
+    The collector upserts indexes with the hourly table pass. Stale indexes are purged after rollupRetentionDays (365). Run Collect now to force collection when empty.
+- key: table:db_perf_index_stat;field:backendName
+  summary: "The configured QQQ backend whose database is monitored."
+- key: table:db_perf_index_stat;field:tableStatId
+  summary: "Reference to the related table stat record."
+- key: table:db_perf_index_stat;field:schemaName
+  summary: "Schema name reported for this index stat record."
+- key: table:db_perf_index_stat;field:tableName
+  summary: "Table name reported for this index stat record."
+- key: table:db_perf_index_stat;field:indexName
+  summary: "Index name reported for this index stat record."
+- key: table:db_perf_index_stat;field:relid
+  summary: "Relid reported for this index stat record."
+- key: table:db_perf_index_stat;field:definition
+  summary: "Definition reported for this index stat record."
+- key: table:db_perf_index_stat;field:columns
+  summary: "Columns reported for this index stat record."
+- key: table:db_perf_index_stat;field:isUnique
+  summary: "Whether this index enforces uniqueness."
+- key: table:db_perf_index_stat;field:isPrimary
+  summary: "Whether this index enforces a primary key."
+- key: table:db_perf_index_stat;field:isValid
+  summary: "Whether PostgreSQL considers the index valid for queries."
+- key: table:db_perf_index_stat;field:idxScan
+  summary: "Idx scan reported for this index stat record."
+- key: table:db_perf_index_stat;field:idxTupRead
+  summary: "Idx tup read reported for this index stat record."
+- key: table:db_perf_index_stat;field:idxTupFetch
+  summary: "Idx tup fetch reported for this index stat record."
+- key: table:db_perf_index_stat;field:sizeBytes
+  summary: "Size bytes; size measured in bytes."
+- key: table:db_perf_index_stat;field:writeCost
+  summary: "Write cost reported for this index stat record."
+- key: table:db_perf_index_stat;field:scansSinceReset
+  summary: "Scans since reset reported for this index stat record."
+- key: table:db_perf_index_stat;field:lastSeenAt
+  summary: "Most recent observation of this statement, table, index or finding."
+- key: table:db_perf_query_daily;slot:help
+  summary: "Daily totals from retained statement snapshot details."
+  content: |
+    Roll up and purge writes completed days, normally at 03:15 in the configured time zone. Retained for rollupRetentionDays (365). Wait for the next daily run after query snapshots exist.
+- key: table:db_perf_query_daily;slot:emptyState
+  summary: "Daily totals from retained statement snapshot details."
+  content: |
+    Roll up and purge writes completed days, normally at 03:15 in the configured time zone. Retained for rollupRetentionDays (365). Wait for the next daily run after query snapshots exist.
+- key: table:db_perf_query_daily;field:statementId
+  summary: "Reference to the related statement record."
+- key: table:db_perf_query_daily;field:day
+  summary: "Calendar day in the configured qbit time zone for this rollup."
+- key: table:db_perf_query_daily;field:calls
+  summary: "Calls reported for this query daily record."
+- key: table:db_perf_query_daily;field:totalMs
+  summary: "Total ms in milliseconds for this measurement."
+- key: table:db_perf_query_daily;field:meanMs
+  summary: "Mean ms in milliseconds for this measurement."
+- key: table:db_perf_query_daily;field:maxMs
+  summary: "Max ms in milliseconds for this measurement."
+- key: table:db_perf_query_daily;field:rowsCount
+  summary: "Rows processed during the measured execution window."
+- key: table:db_perf_query_daily;field:hitRatio
+  summary: "Shared block hits divided by hits plus reads, from 0 to 1; null when no blocks were accessed."
+- key: table:db_perf_query_daily;field:shareOfDbTime
+  summary: "Percentage of all database statement time in this interval, from 0 to 100."
+- key: table:db_perf_query_daily;field:snapshots
+  summary: "Snapshots reported for this query daily record."
+- key: table:db_perf_query_snapshot;slot:help
+  summary: "Interval deltas for the highest-cost statements in each collection."
+  content: |
+    The collector writes the top configured number of statement deltas every collection. New or reset counters establish baselines instead. Retained for detailRetentionDays (30). Collect twice when empty.
+- key: table:db_perf_query_snapshot;slot:emptyState
+  summary: "Interval deltas for the highest-cost statements in each collection."
+  content: |
+    The collector writes the top configured number of statement deltas every collection. New or reset counters establish baselines instead. Retained for detailRetentionDays (30). Collect twice when empty.
+- key: table:db_perf_query_snapshot;field:snapshotId
+  summary: "Reference to the related snapshot record."
+- key: table:db_perf_query_snapshot;field:statementId
+  summary: "Reference to the related statement record."
+- key: table:db_perf_query_snapshot;field:capturedAt
+  summary: "Time this database sample was captured."
+- key: table:db_perf_query_snapshot;field:calls
+  summary: "Calls reported for this query snapshot record."
+- key: table:db_perf_query_snapshot;field:totalMs
+  summary: "Total ms in milliseconds for this measurement."
+- key: table:db_perf_query_snapshot;field:meanMs
+  summary: "Mean ms in milliseconds for this measurement."
+- key: table:db_perf_query_snapshot;field:maxMs
+  summary: "Max ms in milliseconds for this measurement."
+- key: table:db_perf_query_snapshot;field:rowsCount
+  summary: "Rows processed during the measured execution window."
+- key: table:db_perf_query_snapshot;field:sharedBlksHit
+  summary: "Shared blks hit reported for this query snapshot record."
+- key: table:db_perf_query_snapshot;field:sharedBlksRead
+  summary: "Shared blks read reported for this query snapshot record."
+- key: table:db_perf_query_snapshot;field:hitRatio
+  summary: "Shared block hits divided by hits plus reads, from 0 to 1; null when no blocks were accessed."
+- key: table:db_perf_query_snapshot;field:tempBlksWritten
+  summary: "Temp blks written reported for this query snapshot record."
+- key: table:db_perf_query_snapshot;field:shareOfDbTime
+  summary: "Percentage of all database statement time in this interval, from 0 to 100."
+- key: table:db_perf_repeat_pattern;slot:help
+  summary: "Repeated statement shapes within a QQQ unit of work, indicating possible N+1 queries."
+  content: |
+    The attribution listener flushes patterns that reach the configured repetition threshold. Retained for detailRetentionDays (30). Empty is normal when no repeated-statement pattern meets the threshold.
+- key: table:db_perf_repeat_pattern;slot:emptyState
+  summary: "Repeated statement shapes within a QQQ unit of work, indicating possible N+1 queries."
+  content: |
+    The attribution listener flushes patterns that reach the configured repetition threshold. Retained for detailRetentionDays (30). Empty is normal when no repeated-statement pattern meets the threshold.
+- key: table:db_perf_repeat_pattern;field:windowStart
+  summary: "Beginning of the attribution aggregation window."
+- key: table:db_perf_repeat_pattern;field:windowEnd
+  summary: "End of the attribution aggregation window."
+- key: table:db_perf_repeat_pattern;field:podName
+  summary: "Application pod that observed and flushed this attribution window."
+- key: table:db_perf_repeat_pattern;field:unitKind
+  summary: "Kind of QQQ unit of work, such as route, process or scheduled job."
+- key: table:db_perf_repeat_pattern;field:unitName
+  summary: "Name of the QQQ unit responsible for database work."
+- key: table:db_perf_repeat_pattern;field:processName
+  summary: "QQQ process responsible for the attributed work, when known."
+- key: table:db_perf_repeat_pattern;field:tableName
+  summary: "Table name reported for this repeat pattern record."
+- key: table:db_perf_repeat_pattern;field:fingerprint
+  summary: "SHA-256 of the normalized SQL shape; literals and bind values are excluded."
+- key: table:db_perf_repeat_pattern;field:sqlText
+  summary: "Normalized SQL shape without literal values. Parameter values are never stored."
+- key: table:db_perf_repeat_pattern;field:unitsAffected
+  summary: "Number of sampled units that exceeded the repeated-statement threshold."
+- key: table:db_perf_repeat_pattern;field:maxRepeats
+  summary: "Largest repetition count for one fingerprint in a single sampled unit of work."
+- key: table:db_perf_repeat_pattern;field:totalRepeats
+  summary: "Total repeats reported for this repeat pattern record."
+- key: table:db_perf_rule;slot:help
+  summary: "Editable thresholds and severity for each suggestion rule."
+  content: |
+    Seeded insert-only by the Liquibase changelog; existing edits are preserved. Changes affect the next analysis. Rules are retained indefinitely. Apply the changelog when the list is empty.
+    
+    Threshold guide (stored labels are authoritative):
+    - DUPLICATE_INDEX: no numeric thresholds; compares index definitions for identical or prefix-redundant coverage.
+    - SLOW_QUERY: threshold 1 = Mean execution time (ms) (default 500); threshold 2 = Database time (%) (default 5).
+    - MISSING_INDEX: threshold 1 = Sequential scan share (%) (default 50); threshold 2 = Tuples read per "day" (default 1000000).
+    - UNUSED_INDEX: threshold 1 = Days since statistics reset (default 14); threshold 2 = Index size (MB) (default 1).
+    - N_PLUS_ONE: threshold 1 = Repeats per unit (default 10); threshold 2 = Affected units (default 5).
+    - HOT_JOB: threshold 1 = Database time (%) (default 10); threshold 2 is unused.
+    - OVER_AUDITED: threshold 1 = Audit inserts per "day" (default 50000); threshold 2 is unused.
+    - BLOAT: threshold 1 = Dead tuple ratio (%) (default 20); threshold 2 = Dead tuples (default 10000).
+    - VACUUM_STALE: threshold 1 = Days since vacuum (default 7); threshold 2 = Transaction freeze age (default 150000000).
+    - POOL_SIZING: threshold 1 = Connections used (%) (default 80); threshold 2 = Idle connections (%) (default 50).
+    - IDLE_IN_TRANSACTION: threshold 1 = Idle seconds (default 60); threshold 2 is unused.
+    - CACHE_HIT_LOW: threshold 1 = Cache hit ratio (%) (default 95); threshold 2 is unused.
+    - TEMP_SPILL: threshold 1 = Temporary data per "day" (MB) (default 100); threshold 2 is unused.
+    - DEADLOCKS: threshold 1 = Deadlocks per "day" (default 1); threshold 2 is unused.
+- key: table:db_perf_rule;slot:emptyState
+  summary: "Editable thresholds and severity for each suggestion rule."
+  content: |
+    Seeded insert-only by the Liquibase changelog; existing edits are preserved. Changes affect the next analysis. Rules are retained indefinitely. Apply the changelog when the list is empty.
+- key: table:db_perf_rule;field:code
+  summary: "Code reported for this rule record."
+- key: table:db_perf_rule;field:label
+  summary: "Label reported for this rule record."
+- key: table:db_perf_rule;field:description
+  summary: "Description reported for this rule record."
+- key: table:db_perf_rule;field:enabled
+  summary: "Whether collection or this suggestion rule participates in the next scheduled run."
+- key: table:db_perf_rule;field:severity
+  summary: "Configured importance of a finding or rule; contributes to the ranking score."
+- key: table:db_perf_rule;field:threshold1
+  summary: "Numeric rule threshold; its label defines the unit and meaning. See the rule threshold guide."
+  content: |
+    Rule thresholds use the units named on each rule row.
+    
+    - SLOW_QUERY: threshold 1 = Mean execution time (ms) (default 500); threshold 2 = Database time (%) (default 5).
+    - MISSING_INDEX: threshold 1 = Sequential scan share (%) (default 50); threshold 2 = Tuples read per "day" (default 1000000).
+    - UNUSED_INDEX: threshold 1 = Days since statistics reset (default 14); threshold 2 = Index size (MB) (default 1).
+    - N_PLUS_ONE: threshold 1 = Repeats per unit (default 10); threshold 2 = Affected units (default 5).
+    - HOT_JOB: threshold 1 = Database time (%) (default 10); threshold 2 is unused.
+    - OVER_AUDITED: threshold 1 = Audit inserts per "day" (default 50000); threshold 2 is unused.
+    - BLOAT: threshold 1 = Dead tuple ratio (%) (default 20); threshold 2 = Dead tuples (default 10000).
+    - VACUUM_STALE: threshold 1 = Days since vacuum (default 7); threshold 2 = Transaction freeze age (default 150000000).
+    - POOL_SIZING: threshold 1 = Connections used (%) (default 80); threshold 2 = Idle connections (%) (default 50).
+    - IDLE_IN_TRANSACTION: threshold 1 = Idle seconds (default 60); threshold 2 is unused.
+    - CACHE_HIT_LOW: threshold 1 = Cache hit ratio (%) (default 95); threshold 2 is unused.
+    - TEMP_SPILL: threshold 1 = Temporary data per "day" (MB) (default 100); threshold 2 is unused.
+    - DEADLOCKS: threshold 1 = Deadlocks per "day" (default 1); threshold 2 is unused.
+- key: table:db_perf_rule;field:threshold2
+  summary: "Numeric rule threshold; its label defines the unit and meaning. See the rule threshold guide."
+  content: |
+    Rule thresholds use the units named on each rule row.
+    
+    - SLOW_QUERY: threshold 1 = Mean execution time (ms) (default 500); threshold 2 = Database time (%) (default 5).
+    - MISSING_INDEX: threshold 1 = Sequential scan share (%) (default 50); threshold 2 = Tuples read per "day" (default 1000000).
+    - UNUSED_INDEX: threshold 1 = Days since statistics reset (default 14); threshold 2 = Index size (MB) (default 1).
+    - N_PLUS_ONE: threshold 1 = Repeats per unit (default 10); threshold 2 = Affected units (default 5).
+    - HOT_JOB: threshold 1 = Database time (%) (default 10); threshold 2 is unused.
+    - OVER_AUDITED: threshold 1 = Audit inserts per "day" (default 50000); threshold 2 is unused.
+    - BLOAT: threshold 1 = Dead tuple ratio (%) (default 20); threshold 2 = Dead tuples (default 10000).
+    - VACUUM_STALE: threshold 1 = Days since vacuum (default 7); threshold 2 = Transaction freeze age (default 150000000).
+    - POOL_SIZING: threshold 1 = Connections used (%) (default 80); threshold 2 = Idle connections (%) (default 50).
+    - IDLE_IN_TRANSACTION: threshold 1 = Idle seconds (default 60); threshold 2 is unused.
+    - CACHE_HIT_LOW: threshold 1 = Cache hit ratio (%) (default 95); threshold 2 is unused.
+    - TEMP_SPILL: threshold 1 = Temporary data per "day" (MB) (default 100); threshold 2 is unused.
+    - DEADLOCKS: threshold 1 = Deadlocks per "day" (default 1); threshold 2 is unused.
+- key: table:db_perf_rule;field:threshold1Label
+  summary: "Threshold1 label reported for this rule record."
+- key: table:db_perf_rule;field:threshold2Label
+  summary: "Threshold2 label reported for this rule record."
+- key: table:db_perf_settings;slot:help
+  summary: "Per-backend collection, retention, attribution and query-plan settings."
+  content: |
+    Created on the first collection or explain request. Administrators edit these values; dashboard reads do not create settings. Settings are retained until removed by the host. Run Collect now when empty.
+- key: table:db_perf_settings;slot:emptyState
+  summary: "Per-backend collection, retention, attribution and query-plan settings."
+  content: |
+    Created on the first collection or explain request. Administrators edit these values; dashboard reads do not create settings. Settings are retained until removed by the host. Run Collect now when empty.
+- key: table:db_perf_settings;field:backendName
+  summary: "The configured QQQ backend whose database is monitored."
+- key: table:db_perf_settings;field:enabled
+  summary: "Whether collection or this suggestion rule participates in the next scheduled run."
+- key: table:db_perf_settings;field:provider
+  summary: "Detected statistics provider; unsupported vendors report a setup message."
+- key: table:db_perf_settings;field:snapshotIntervalMinutes
+  summary: "Minimum minutes between scheduled snapshots; default 5. Collect now forces collection."
+- key: table:db_perf_settings;field:tableSnapshotMinutes
+  summary: "Minutes between table and index collection passes; default 60."
+- key: table:db_perf_settings;field:detailRetentionDays
+  summary: "Age in days before detailed samples and plan audits are purged; default 30."
+- key: table:db_perf_settings;field:rollupRetentionDays
+  summary: "Retention in days for daily rows and stale inventory or closed findings; default 365."
+- key: table:db_perf_settings;field:topStatementsPerSnapshot
+  summary: "Maximum statement details saved per pass, ranked by database time; default 200."
+- key: table:db_perf_settings;field:activityLongRunningSeconds
+  summary: "Active query age in seconds that makes a session notable; default 30."
+- key: table:db_perf_settings;field:idleInTransactionSeconds
+  summary: "Idle transaction age in seconds that makes a session notable; default 60."
+- key: table:db_perf_settings;field:attributionEnabled
+  summary: "Enable QQQ statement attribution; the host listener must also be enabled."
+- key: table:db_perf_settings;field:attributionSampleRate
+  summary: "Fraction of QQQ units sampled, from 0 to 1; default 1 captures every unit."
+- key: table:db_perf_settings;field:attributionFlushSeconds
+  summary: "Seconds between attribution batch flushes; default 60. A crash can lose one window."
+- key: table:db_perf_settings;field:attributionMaxKeys
+  summary: "Maximum in-memory attribution groups per pod; overflow goes to an other group. Default 10000."
+- key: table:db_perf_settings;field:nPlusOneThreshold
+  summary: "Repeated occurrences of a statement shape in one unit before recording a pattern; default 10."
+- key: table:db_perf_settings;field:explainTimeoutMs
+  summary: "Maximum query-plan execution time in milliseconds; default 10000 for PLAN and ANALYZE."
+- key: table:db_perf_settings;field:alertsEnabled
+  summary: "Enable database performance alert emission when the alert integration is installed."
+- key: table:db_perf_settings;field:spikeFactor
+  summary: "Multiplier above the seven-day interval median needed for a query-spike alert; default 3."
+- key: table:db_perf_settings;field:spikeMinTotalMs
+  summary: "Minimum interval query time in milliseconds before a spike can alert; default 5000."
+- key: table:db_perf_settings;field:connectionAlertPercent
+  summary: "Percentage of max connections at which saturation can alert; default 80."
+- key: table:db_perf_settings;field:blockedAlertSeconds
+  summary: "Blocked session duration in seconds required for a blocking-chain alert; default 30."
+- key: table:db_perf_settings;field:lastSnapshotAt
+  summary: "Time of the latest collection tracked by the backend settings."
+- key: table:db_perf_settings;field:lastTableSnapshotAt
+  summary: "Time of the latest table and index collection pass."
+- key: table:db_perf_settings;field:statsAccess
+  summary: "Statistics capability: FULL, reduced access, missing extension, or unsupported provider."
+- key: table:db_perf_settings;field:statsAccessMessage
+  summary: "The collector explains missing capabilities and the next grant or setup step."
+- key: table:db_perf_snapshot;slot:help
+  summary: "One collection pass and its database-wide interval totals."
+  content: |
+    The collector writes this table every five minutes by default, including partial and failed passes. The first pass establishes a baseline. Retained for detailRetentionDays (30 by default). Run Collect now when empty.
+- key: table:db_perf_snapshot;slot:emptyState
+  summary: "One collection pass and its database-wide interval totals."
+  content: |
+    The collector writes this table every five minutes by default, including partial and failed passes. The first pass establishes a baseline. Retained for detailRetentionDays (30 by default). Run Collect now when empty.
+- key: table:db_perf_snapshot;field:backendName
+  summary: "The configured QQQ backend whose database is monitored."
+- key: table:db_perf_snapshot;field:capturedAt
+  summary: "Time this database sample was captured."
+- key: table:db_perf_snapshot;field:intervalSeconds
+  summary: "Interval seconds reported for this snapshot record."
+- key: table:db_perf_snapshot;field:status
+  summary: "Current lifecycle state. Review the status-specific guidance and related messages."
+- key: table:db_perf_snapshot;field:durationMs
+  summary: "Duration ms in milliseconds for this measurement."
+- key: table:db_perf_snapshot;field:errorMessage
+  summary: "Sanitized failure description. Database SQL errors and parameter values are excluded."
+- key: table:db_perf_snapshot;field:statsResetDetected
+  summary: "Counters restarted or decreased; that pass establishes a new baseline."
+- key: table:db_perf_snapshot;field:includesTables
+  summary: "Includes tables reported for this snapshot record."
+- key: table:db_perf_snapshot;field:xactCommit
+  summary: "Xact commit reported for this snapshot record."
+- key: table:db_perf_snapshot;field:xactRollback
+  summary: "Xact rollback reported for this snapshot record."
+- key: table:db_perf_snapshot;field:blksHit
+  summary: "Blks hit reported for this snapshot record."
+- key: table:db_perf_snapshot;field:blksRead
+  summary: "Blks read reported for this snapshot record."
+- key: table:db_perf_snapshot;field:cacheHitRatio
+  summary: "Database cache hits divided by hits plus reads, from 0 to 1."
+- key: table:db_perf_snapshot;field:tempFiles
+  summary: "Temp files reported for this snapshot record."
+- key: table:db_perf_snapshot;field:tempBytes
+  summary: "Temp bytes; size measured in bytes."
+- key: table:db_perf_snapshot;field:deadlocks
+  summary: "Deadlocks reported for this snapshot record."
+- key: table:db_perf_snapshot;field:conflicts
+  summary: "Conflicts reported for this snapshot record."
+- key: table:db_perf_snapshot;field:connectionsTotal
+  summary: "Connections total reported for this snapshot record."
+- key: table:db_perf_snapshot;field:connectionsActive
+  summary: "Connections active reported for this snapshot record."
+- key: table:db_perf_snapshot;field:connectionsIdle
+  summary: "Connections idle reported for this snapshot record."
+- key: table:db_perf_snapshot;field:connectionsIdleInTx
+  summary: "Connections idle in tx reported for this snapshot record."
+- key: table:db_perf_snapshot;field:maxConnections
+  summary: "Max connections reported for this snapshot record."
+- key: table:db_perf_snapshot;field:databaseSizeBytes
+  summary: "Database size bytes; size measured in bytes."
+- key: table:db_perf_snapshot;field:statementCount
+  summary: "Statement count reported for this snapshot record."
+- key: table:db_perf_snapshot;field:statementCalls
+  summary: "Statement calls reported for this snapshot record."
+- key: table:db_perf_snapshot;field:statementTotalMs
+  summary: "Statement total ms in milliseconds for this measurement."
+- key: table:db_perf_snapshot;field:storedStatementCount
+  summary: "Stored statement count reported for this snapshot record."
+- key: table:db_perf_snapshot;field:rawXactCommit
+  summary: "Previous cumulative xact commit counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawXactRollback
+  summary: "Previous cumulative xact rollback counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawBlksHit
+  summary: "Previous cumulative blks hit counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawBlksRead
+  summary: "Previous cumulative blks read counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawTempFiles
+  summary: "Previous cumulative temp files counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawTempBytes
+  summary: "Previous cumulative temp bytes counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawDeadlocks
+  summary: "Previous cumulative deadlocks counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawConflicts
+  summary: "Previous cumulative conflicts counter used for reset-safe deltas."
+- key: table:db_perf_snapshot;field:rawStatsReset
+  summary: "Previous database counter reset timestamp used for delta calculations."
+- key: table:db_perf_snapshot;field:rawStatementStatsReset
+  summary: "Previous provider reset marker used to detect counter resets, not raw SQL."
+- key: table:db_perf_statement;slot:help
+  summary: "Normalized query shapes with the latest counters and retained 24-hour totals."
+  content: |
+    The collector upserts statements observed in pg_stat_statements each collection. Two snapshots establish deltas. Retained while observed; stale records are purged after rollupRetentionDays (365 by default). Enable pg_stat_statements and collect twice when empty.
+- key: table:db_perf_statement;slot:emptyState
+  summary: "Normalized query shapes with the latest counters and retained 24-hour totals."
+  content: |
+    The collector upserts statements observed in pg_stat_statements each collection. Two snapshots establish deltas. Retained while observed; stale records are purged after rollupRetentionDays (365 by default). Enable pg_stat_statements and collect twice when empty.
+- key: table:db_perf_statement;field:backendName
+  summary: "The configured QQQ backend whose database is monitored."
+- key: table:db_perf_statement;field:queryId
+  summary: "PostgreSQL query identifier; fingerprint provides cross-source normalized matching."
+- key: table:db_perf_statement;field:dbUser
+  summary: "Database role associated with this statement, session or connection group."
+- key: table:db_perf_statement;field:toplevel
+  summary: "Toplevel reported for this statement record."
+- key: table:db_perf_statement;field:fingerprint
+  summary: "SHA-256 of the normalized SQL shape; literals and bind values are excluded."
+- key: table:db_perf_statement;field:queryText
+  summary: "Normalized query text with literals replaced by placeholders; never raw live text."
+- key: table:db_perf_statement;field:operation
+  summary: "Normalized SQL operation, such as SELECT, INSERT, UPDATE or DELETE."
+- key: table:db_perf_statement;field:mainTable
+  summary: "Best-effort main table extracted from normalized SQL."
+- key: table:db_perf_statement;field:firstSeenAt
+  summary: "First recorded observation of this statement or finding."
+- key: table:db_perf_statement;field:lastSeenAt
+  summary: "Most recent observation of this statement, table, index or finding."
+- key: table:db_perf_statement;field:lastCalls
+  summary: "Last calls reported for this statement record."
+- key: table:db_perf_statement;field:lastTotalExecMs
+  summary: "Last total exec ms in milliseconds for this measurement."
+- key: table:db_perf_statement;field:lastRows
+  summary: "Last rows reported for this statement record."
+- key: table:db_perf_statement;field:lastSharedBlksHit
+  summary: "Last shared blks hit reported for this statement record."
+- key: table:db_perf_statement;field:lastSharedBlksRead
+  summary: "Last shared blks read reported for this statement record."
+- key: table:db_perf_statement;field:lastTempBlksWritten
+  summary: "Last temp blks written reported for this statement record."
+- key: table:db_perf_statement;field:lastMaxExecMs
+  summary: "Latest cumulative maximum execution time in milliseconds; not an interval maximum."
+- key: table:db_perf_statement;field:lastStatsSince
+  summary: "Per-statement counter start time when the PostgreSQL version supplies it."
+- key: table:db_perf_statement;field:calls24h
+  summary: "Calls in retained statement details from the last 24 hours."
+- key: table:db_perf_statement;field:totalMs24h
+  summary: "Execution time in milliseconds in retained statement details from the last 24 hours."
+- key: table:db_perf_statement;field:meanMs24h
+  summary: "Total retained execution milliseconds divided by retained calls over 24 hours."
+- key: table:db_perf_statement;field:shareOfDbTime24h
+  summary: "Percentage of database time over 24 hours; numerator uses retained statement details."
+- key: table:db_perf_table_daily;slot:help
+  summary: "Daily table scan deltas and ending size used to track growth."
+  content: |
+    The daily rollup writes these rows from retained table samples, normally at 03:15. Retained for rollupRetentionDays (365). Wait for the daily rollup after table snapshots exist.
+- key: table:db_perf_table_daily;slot:emptyState
+  summary: "Daily table scan deltas and ending size used to track growth."
+  content: |
+    The daily rollup writes these rows from retained table samples, normally at 03:15. Retained for rollupRetentionDays (365). Wait for the daily rollup after table snapshots exist.
+- key: table:db_perf_table_daily;field:tableStatId
+  summary: "Reference to the related table stat record."
+- key: table:db_perf_table_daily;field:day
+  summary: "Calendar day in the configured qbit time zone for this rollup."
+- key: table:db_perf_table_daily;field:seqScan
+  summary: "Seq scan reported for this table daily record."
+- key: table:db_perf_table_daily;field:idxScan
+  summary: "Idx scan reported for this table daily record."
+- key: table:db_perf_table_daily;field:seqTupRead
+  summary: "Seq tup read reported for this table daily record."
+- key: table:db_perf_table_daily;field:nTupIns
+  summary: "PostgreSQL n tup ins tuple statistic for the sampled table."
+- key: table:db_perf_table_daily;field:nTupUpd
+  summary: "PostgreSQL n tup upd tuple statistic for the sampled table."
+- key: table:db_perf_table_daily;field:nTupDel
+  summary: "PostgreSQL n tup del tuple statistic for the sampled table."
+- key: table:db_perf_table_daily;field:nLiveTup
+  summary: "PostgreSQL n live tup tuple statistic for the sampled table."
+- key: table:db_perf_table_daily;field:nDeadTup
+  summary: "PostgreSQL n dead tup tuple statistic for the sampled table."
+- key: table:db_perf_table_daily;field:totalBytes
+  summary: "Total bytes; size measured in bytes."
+- key: table:db_perf_table_snapshot;slot:help
+  summary: "Historical samples of table scans, tuples, size and maintenance."
+  content: |
+    The collector writes table snapshots every tableSnapshotMinutes (60). Retained for detailRetentionDays (30). Run Collect now or wait for the next hourly table pass.
+- key: table:db_perf_table_snapshot;slot:emptyState
+  summary: "Historical samples of table scans, tuples, size and maintenance."
+  content: |
+    The collector writes table snapshots every tableSnapshotMinutes (60). Retained for detailRetentionDays (30). Run Collect now or wait for the next hourly table pass.
+- key: table:db_perf_table_snapshot;field:snapshotId
+  summary: "Reference to the related snapshot record."
+- key: table:db_perf_table_snapshot;field:tableStatId
+  summary: "Reference to the related table stat record."
+- key: table:db_perf_table_snapshot;field:capturedAt
+  summary: "Time this database sample was captured."
+- key: table:db_perf_table_snapshot;field:seqScan
+  summary: "Seq scan reported for this table snapshot record."
+- key: table:db_perf_table_snapshot;field:seqTupRead
+  summary: "Seq tup read reported for this table snapshot record."
+- key: table:db_perf_table_snapshot;field:idxScan
+  summary: "Idx scan reported for this table snapshot record."
+- key: table:db_perf_table_snapshot;field:idxTupFetch
+  summary: "Idx tup fetch reported for this table snapshot record."
+- key: table:db_perf_table_snapshot;field:nTupIns
+  summary: "PostgreSQL n tup ins tuple statistic for the sampled table."
+- key: table:db_perf_table_snapshot;field:nTupUpd
+  summary: "PostgreSQL n tup upd tuple statistic for the sampled table."
+- key: table:db_perf_table_snapshot;field:nTupDel
+  summary: "PostgreSQL n tup del tuple statistic for the sampled table."
+- key: table:db_perf_table_snapshot;field:nTupHotUpd
+  summary: "PostgreSQL n tup hot upd tuple statistic for the sampled table."
+- key: table:db_perf_table_snapshot;field:nLiveTup
+  summary: "PostgreSQL n live tup tuple statistic for the sampled table."
+- key: table:db_perf_table_snapshot;field:nDeadTup
+  summary: "PostgreSQL n dead tup tuple statistic for the sampled table."
+- key: table:db_perf_table_snapshot;field:totalBytes
+  summary: "Total bytes; size measured in bytes."
+- key: table:db_perf_table_snapshot;field:tableBytes
+  summary: "Table bytes; size measured in bytes."
+- key: table:db_perf_table_snapshot;field:indexBytes
+  summary: "Index bytes; size measured in bytes."
+- key: table:db_perf_table_snapshot;field:autovacuumCount
+  summary: "Autovacuum count reported for this table snapshot record."
+- key: table:db_perf_table_snapshot;field:autoanalyzeCount
+  summary: "Autoanalyze count reported for this table snapshot record."
+- key: table:db_perf_table_snapshot;field:freezeAge
+  summary: "Transaction-ID age used to assess vacuum and wraparound risk."
+- key: table:db_perf_table_stat;slot:help
+  summary: "Current table size, scans, tuple counts and maintenance statistics."
+  content: |
+    The collector upserts table data every tableSnapshotMinutes (60). Stale records are purged after rollupRetentionDays (365). Run Collect now to force table collection when empty.
+- key: table:db_perf_table_stat;slot:emptyState
+  summary: "Current table size, scans, tuple counts and maintenance statistics."
+  content: |
+    The collector upserts table data every tableSnapshotMinutes (60). Stale records are purged after rollupRetentionDays (365). Run Collect now to force table collection when empty.
+- key: table:db_perf_table_stat;field:backendName
+  summary: "The configured QQQ backend whose database is monitored."
+- key: table:db_perf_table_stat;field:schemaName
+  summary: "Schema name reported for this table stat record."
+- key: table:db_perf_table_stat;field:tableName
+  summary: "Table name reported for this table stat record."
+- key: table:db_perf_table_stat;field:relid
+  summary: "Relid reported for this table stat record."
+- key: table:db_perf_table_stat;field:seqScan
+  summary: "Seq scan reported for this table stat record."
+- key: table:db_perf_table_stat;field:seqTupRead
+  summary: "Seq tup read reported for this table stat record."
+- key: table:db_perf_table_stat;field:idxScan
+  summary: "Idx scan reported for this table stat record."
+- key: table:db_perf_table_stat;field:idxTupFetch
+  summary: "Idx tup fetch reported for this table stat record."
+- key: table:db_perf_table_stat;field:nTupIns
+  summary: "PostgreSQL n tup ins tuple statistic for the sampled table."
+- key: table:db_perf_table_stat;field:nTupUpd
+  summary: "PostgreSQL n tup upd tuple statistic for the sampled table."
+- key: table:db_perf_table_stat;field:nTupDel
+  summary: "PostgreSQL n tup del tuple statistic for the sampled table."
+- key: table:db_perf_table_stat;field:nTupHotUpd
+  summary: "PostgreSQL n tup hot upd tuple statistic for the sampled table."
+- key: table:db_perf_table_stat;field:nLiveTup
+  summary: "PostgreSQL n live tup tuple statistic for the sampled table."
+- key: table:db_perf_table_stat;field:nDeadTup
+  summary: "PostgreSQL n dead tup tuple statistic for the sampled table."
+- key: table:db_perf_table_stat;field:deadRatio
+  summary: "Dead tuples divided by live plus dead tuples, from 0 to 1; an estimate used for maintenance review."
+- key: table:db_perf_table_stat;field:totalBytes
+  summary: "Total bytes; size measured in bytes."
+- key: table:db_perf_table_stat;field:tableBytes
+  summary: "Table bytes; size measured in bytes."
+- key: table:db_perf_table_stat;field:indexBytes
+  summary: "Index bytes; size measured in bytes."
+- key: table:db_perf_table_stat;field:toastBytes
+  summary: "Toast bytes; size measured in bytes."
+- key: table:db_perf_table_stat;field:growthBytes7d
+  summary: "Change in table size in bytes over seven days, once enough daily history exists."
+- key: table:db_perf_table_stat;field:lastVacuum
+  summary: "Last manual vacuum reported by PostgreSQL."
+- key: table:db_perf_table_stat;field:lastAutovacuum
+  summary: "Last automatic vacuum reported by PostgreSQL."
+- key: table:db_perf_table_stat;field:lastAnalyze
+  summary: "Last manual statistics analyze reported by PostgreSQL."
+- key: table:db_perf_table_stat;field:lastAutoanalyze
+  summary: "Last automatic statistics analyze reported by PostgreSQL."
+- key: table:db_perf_table_stat;field:vacuumCount
+  summary: "Vacuum count reported for this table stat record."
+- key: table:db_perf_table_stat;field:autovacuumCount
+  summary: "Autovacuum count reported for this table stat record."
+- key: table:db_perf_table_stat;field:analyzeCount
+  summary: "Analyze count reported for this table stat record."
+- key: table:db_perf_table_stat;field:autoanalyzeCount
+  summary: "Autoanalyze count reported for this table stat record."
+- key: table:db_perf_table_stat;field:freezeAge
+  summary: "Transaction-ID age used to assess vacuum and wraparound risk."
+- key: table:db_perf_table_stat;field:seqScanShare
+  summary: "Fraction of table scans that are sequential, from 0 to 1; high values merit query and index review."
+- key: table:db_perf_table_stat;field:lastSeenAt
+  summary: "Most recent observation of this statement, table, index or finding."
+- key: process:dbPerfCollectSnapshot;slot:help
+  summary: "Collect database snapshots on the host schedule."
+  content: |
+    Runs at the configured snapshot cadence, normally every five minutes. Reads statistics and writes interval deltas and notable activity; table/index passes normally run hourly. Requires manage settings.
+- key: process:dbPerfCollectNow;slot:help
+  summary: "Collect an immediate snapshot and force table and index statistics."
+  content: |
+    Run from the Snapshots table. Requires manage settings. The Result screen reports success, partial access or collection failure. The first pass establishes counter baselines.
+- key: process:dbPerfRollupAndPurge;slot:help
+  summary: "Roll up completed days and remove expired details."
+  content: |
+    Runs daily at 03:15 by default. Uses the configured time zone, detail retention and rollup retention. Reruns replace daily aggregates instead of duplicating them.
+- key: process:dbPerfQueryPlan;slot:help
+  summary: "Inspect the plan of one statement, with optional read-only execution."
+  content: |
+    Choose PLAN (default) or ANALYZE. PLAN uses a generic plan for parameterized SQL on PostgreSQL 16+. ANALYZE requires explain analyze permission and exactly one SELECT with no modifying CTEs, INTO or row locks. Enter parameter values only for ANALYZE, one per line in placeholder order. Values are sent transiently; they and the ANALYZE plan are never stored. Every request is audited. Results include copyable plan text, cost, a SQL Workbench link and a literal-free assistant prompt. No model is called by this qbit.
+- key: widget:dbPerfSetup;slot:label
+  summary: "Check backend, statistics access, collection, attribution and scheduler setup."
+- key: widget:dbPerfDatabaseTime;slot:label
+  summary: "Database execution milliseconds and call counts per snapshot over the last 24 hours."
+- key: widget:dbPerfTopQueries;slot:label
+  summary: "Most expensive retained query shapes over 24 hours; open a query to inspect its history."
+- key: widget:dbPerfFindings;slot:label
+  summary: "Open and acknowledged findings ranked by impact."
+- key: widget:dbPerfLiveActivity;slot:label
+  summary: "Current notable sessions with normalized text, blocking and transaction ages."
+- key: widget:dbPerfConnections;slot:label
+  summary: "Connection capacity followed by a live application and user breakdown."
+- key: widget:dbPerfConnectionStatistics;slot:label
+  summary: "Latest snapshot capacity and cache hit percentage, with 24-hour temp and deadlock totals."
+- key: widget:dbPerfConnectionsByApplication;slot:label
+  summary: "Current connections grouped by application, database user and state."
+- key: widget:dbPerfAttribution;slot:label
+  summary: "QQQ units ranked by database time, followed by repeated-statement patterns."
+- key: widget:dbPerfTables;slot:label
+  summary: "Sequential-scan-heavy tables and tables with the fastest seven-day size growth."
+- key: widget:db_perf_snapshot_db_perf_query_snapshot;slot:label
+  summary: "Related interval deltas for the highest-cost statements in each collection."
+- key: widget:db_perf_statement_db_perf_query_snapshot;slot:label
+  summary: "Related interval deltas for the highest-cost statements in each collection."
+- key: widget:db_perf_statement_db_perf_query_daily;slot:label
+  summary: "Related daily totals from retained statement snapshot details."
+- key: widget:db_perf_snapshot_db_perf_table_snapshot;slot:label
+  summary: "Related historical samples of table scans, tuples, size and maintenance."
+- key: widget:db_perf_table_stat_db_perf_table_snapshot;slot:label
+  summary: "Related historical samples of table scans, tuples, size and maintenance."
+- key: widget:db_perf_table_stat_db_perf_table_daily;slot:label
+  summary: "Related daily table scan deltas and ending size used to track growth."
+- key: widget:db_perf_table_stat_db_perf_index_stat;slot:label
+  summary: "Related current index definitions, usage, size and uniqueness."
+- key: widget:db_perf_snapshot_db_perf_activity_sample;slot:label
+  summary: "Related notable session samples with normalized text, never raw query text."
+- key: widget:db_perf_snapshot_db_perf_connection_sample;slot:label
+  summary: "Related connection counts grouped by application, user and state for each snapshot."
+- key: widget:db_perf_rule_db_perf_finding;slot:label
+  summary: "Related ranked, deduplicated suggestions with supporting evidence and proposed fixes."
+- key: widget:db_perf_statement_db_perf_finding;slot:label
+  summary: "Related ranked, deduplicated suggestions with supporting evidence and proposed fixes."
+- key: widget:db_perf_table_stat_db_perf_finding;slot:label
+  summary: "Related ranked, deduplicated suggestions with supporting evidence and proposed fixes."
+- key: widget:db_perf_statement_db_perf_explain;slot:label
+  summary: "Related audited plan requests, including denied, failed and timed-out attempts."
+- key: possibleValueSource:db_perf_ExplainMode;slot:help
+  summary: "Available values for explainmode."
+- key: possibleValueSource:db_perf_FindingStatus;slot:help
+  summary: "Available values for findingstatus."
+- key: possibleValueSource:db_perf_Operation;slot:help
+  summary: "Available values for operation."
+- key: possibleValueSource:db_perf_Outcome;slot:help
+  summary: "Available values for outcome."
+- key: possibleValueSource:db_perf_Provider;slot:help
+  summary: "Available values for provider."
+- key: possibleValueSource:db_perf_Reason;slot:help
+  summary: "Available values for reason."
+- key: possibleValueSource:db_perf_Severity;slot:help
+  summary: "Available values for severity."
+- key: possibleValueSource:db_perf_SnapshotStatus;slot:help
+  summary: "Available values for snapshotstatus."
+- key: possibleValueSource:db_perf_State;slot:help
+  summary: "Available values for state."
+- key: possibleValueSource:db_perf_StatsAccess;slot:help
+  summary: "Available values for statsaccess."
+- key: possibleValueSource:db_perf_UnitKind;slot:help
+  summary: "Available values for unitkind."
+- key: possibleValueSource:db_perf_activity_sample;slot:help
+  summary: "Available values for activity sample."
+- key: possibleValueSource:db_perf_attribution;slot:help
+  summary: "Available values for attribution."
+- key: possibleValueSource:db_perf_attribution_daily;slot:help
+  summary: "Available values for attribution daily."
+- key: possibleValueSource:db_perf_connection_sample;slot:help
+  summary: "Available values for connection sample."
+- key: possibleValueSource:db_perf_explain;slot:help
+  summary: "Available values for explain."
+- key: possibleValueSource:db_perf_finding;slot:help
+  summary: "Available values for finding."
+- key: possibleValueSource:db_perf_index_stat;slot:help
+  summary: "Available values for index stat."
+- key: possibleValueSource:db_perf_query_daily;slot:help
+  summary: "Available values for query daily."
+- key: possibleValueSource:db_perf_query_snapshot;slot:help
+  summary: "Available values for query snapshot."
+- key: possibleValueSource:db_perf_repeat_pattern;slot:help
+  summary: "Available values for repeat pattern."
+- key: possibleValueSource:db_perf_rule;slot:help
+  summary: "Available values for rule."
+- key: possibleValueSource:db_perf_settings;slot:help
+  summary: "Available values for settings."
+- key: possibleValueSource:db_perf_snapshot;slot:help
+  summary: "Available values for snapshot."
+- key: possibleValueSource:db_perf_statement;slot:help
+  summary: "Available values for statement."
+- key: possibleValueSource:db_perf_table_daily;slot:help
+  summary: "Available values for table daily."
+- key: possibleValueSource:db_perf_table_snapshot;slot:help
+  summary: "Available values for table snapshot."
+- key: possibleValueSource:db_perf_table_stat;slot:help
+  summary: "Available values for table stat."
+- key: process:db_perf_settings.bulkEdit;slot:help
+  summary: Review and apply changes to database performance settings records.
+  content: |
+    Requires manage settings permission. Review every changed value before applying the standard QQQ action. Changes affect subsequent collection or analysis; they do not change the monitored database schema.
+- key: process:db_perf_settings.bulkEditWithFile;slot:help
+  summary: Review and apply changes to database performance settings records.
+  content: |
+    Requires manage settings permission. Review every changed value before applying the standard QQQ action. Changes affect subsequent collection or analysis; they do not change the monitored database schema.
+- key: process:db_perf_rule.bulkInsert;slot:help
+  summary: Review and apply changes to database performance rule records.
+  content: |
+    Requires manage settings permission. Review every changed value before applying the standard QQQ action. Changes affect subsequent collection or analysis; they do not change the monitored database schema.
+- key: process:db_perf_rule.bulkEdit;slot:help
+  summary: Review and apply changes to database performance rule records.
+  content: |
+    Requires manage settings permission. Review every changed value before applying the standard QQQ action. Changes affect subsequent collection or analysis; they do not change the monitored database schema.
+- key: process:db_perf_rule.bulkEditWithFile;slot:help
+  summary: Review and apply changes to database performance rule records.
+  content: |
+    Requires manage settings permission. Review every changed value before applying the standard QQQ action. Changes affect subsequent collection or analysis; they do not change the monitored database schema.
+- key: process:db_perf_rule.bulkDelete;slot:help
+  summary: Review and apply changes to database performance rule records.
+  content: |
+    Requires manage settings permission. Review every changed value before applying the standard QQQ action. Changes affect subsequent collection or analysis; they do not change the monitored database schema.
+- key: possibleValueSource:db_perf_ExplainRequestMode;slot:help
+  summary: PLAN inspects the query; ANALYZE executes a guarded read-only SELECT with separate permission.

@@ -4,7 +4,7 @@ This file provides guidance to Codex when working with code in this repository.
 
 ## Project Overview
 
-**QBit DB Performance**: Database performance for QQQ apps: slow and expensive queries from pg_stat_statements with delta snapshots, table scan and index analysis, live activity and blocking chains, connection capacity, maintenance, QQQ query attribution with N+1 detection, and ranked suggestions, all as standard QQQ tables. Design: docs/SPEC.md in this repository. Implementation in progress.
+**QBit DB Performance**: Database performance for QQQ apps in standard secured tables: PostgreSQL statement deltas, table and index analysis, live activity and blocking, connection capacity, audited read-only query plans, typed full-width dashboards, a versioned UI API and data-driven help. Collection and presentation are implemented; attribution, findings, alerts and health runtime integrations are developed separately. Design: docs/SPEC.md.
 
 ## Build Commands
 
@@ -21,7 +21,7 @@ This file provides guidance to Codex when working with code in this repository.
 ## Naming (owner rule)
 
 - Tables are lowercase snake_case prefixed with the full qbit name: `db_perf_<name>`. The QQQ table name and the backend (SQL) name are identical; possible-value sources take the table name.
-- Permissions use the full qbit name: `db_perf.<action>` (for example `db_perf.view`, `db_perf.admin`).
+- Permissions use the full qbit name: `db_performance.<action>` (for example `db_performance.view`, `db_performance.manage_settings`).
 - Qbit data lives in standard, visible QQQ tables, secured by permissions and record security locks, never hidden.
 - Processes run as table or record actions, never in the nav.
 
@@ -35,7 +35,7 @@ This file provides guidance to Codex when working with code in this repository.
 ## Dependencies
 
 - Java 21.
-- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.10` ahead of it, as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
+- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.11` ahead of it, as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
 - Tests: JUnit 5, AssertJ.
 
 ## Release

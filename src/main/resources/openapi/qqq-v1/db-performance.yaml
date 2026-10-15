@@ -1,0 +1,434 @@
+components:
+  schemas:
+    DbPerformanceActivityV1:
+      properties:
+        blockingChains:
+          items:
+            $ref: "#/components/schemas/DbPerformanceBlockingChainV1"
+          type: "array"
+        liveTextRedacted:
+          type: "boolean"
+        sessions:
+          items:
+            $ref: "#/components/schemas/DbPerformanceSessionV1"
+          type: "array"
+      type: "object"
+    DbPerformanceBlockingChainV1:
+      properties:
+        blockedPids:
+          items:
+            nullable: true
+            type: "integer"
+          type: "array"
+        rootPid:
+          nullable: true
+          type: "integer"
+      type: "object"
+    DbPerformanceErrorV1:
+      properties:
+        error:
+          nullable: true
+          type: "string"
+      type: "object"
+    DbPerformanceExplainRequestV1:
+      description: "Supply exactly one of statementId or sql. Parameters are strings,\
+        \ accepted only for ANALYZE and never stored."
+      properties:
+        backend:
+          nullable: true
+          type: "string"
+        mode:
+          enum:
+          - "PLAN"
+          - "ANALYZE"
+          type: "string"
+        parameters:
+          items:
+            nullable: true
+            type: "string"
+          type: "array"
+        sql:
+          nullable: true
+          type: "string"
+        statementId:
+          nullable: true
+          type: "integer"
+      type: "object"
+    DbPerformanceExplainResultV1:
+      properties:
+        actualTotalMs:
+          nullable: true
+          type: "number"
+        assistantPrompt:
+          nullable: true
+          type: "string"
+        explainId:
+          nullable: true
+          type: "integer"
+        mode:
+          nullable: true
+          type: "string"
+        planJson:
+          nullable: true
+          type: "string"
+        planText:
+          nullable: true
+          type: "string"
+        sqlWorkbenchUrl:
+          nullable: true
+          type: "string"
+        totalCost:
+          nullable: true
+          type: "number"
+        warnings:
+          items:
+            nullable: true
+            type: "string"
+          type: "array"
+      type: "object"
+    DbPerformanceFindingV1:
+      properties:
+        id:
+          nullable: true
+          type: "integer"
+        score:
+          nullable: true
+          type: "number"
+        severity:
+          nullable: true
+          type: "string"
+        title:
+          nullable: true
+          type: "string"
+      type: "object"
+    DbPerformanceLookupV1:
+      properties:
+        fingerprint:
+          nullable: true
+          type: "string"
+        matches:
+          items:
+            $ref: "#/components/schemas/DbPerformanceStatementV1"
+          type: "array"
+        normalizedSql:
+          nullable: true
+          type: "string"
+      type: "object"
+    DbPerformanceOverviewV1:
+      properties:
+        findingsBySeverity:
+          additionalProperties:
+            nullable: true
+            type: "integer"
+          type: "object"
+        settings:
+          $ref: "#/components/schemas/DbPerformanceSettingsV1"
+        snapshot:
+          $ref: "#/components/schemas/DbPerformanceSnapshotV1"
+        topFindings:
+          items:
+            $ref: "#/components/schemas/DbPerformanceFindingV1"
+          type: "array"
+        topStatements:
+          items:
+            $ref: "#/components/schemas/DbPerformanceStatementV1"
+          type: "array"
+      type: "object"
+    DbPerformanceSessionV1:
+      properties:
+        application:
+          nullable: true
+          type: "string"
+        blockedBy:
+          items:
+            nullable: true
+            type: "integer"
+          type: "array"
+        blockingCount:
+          nullable: true
+          type: "integer"
+        fingerprint:
+          nullable: true
+          type: "string"
+        liveTextRedacted:
+          type: "boolean"
+        normalizedText:
+          nullable: true
+          type: "string"
+        pid:
+          nullable: true
+          type: "integer"
+        query:
+          description: "Raw live SQL only with view_live_text; never persisted."
+          nullable: true
+          type: "string"
+        querySeconds:
+          nullable: true
+          type: "number"
+        state:
+          nullable: true
+          type: "string"
+        user:
+          nullable: true
+          type: "string"
+        waitEvent:
+          nullable: true
+          type: "string"
+        xactSeconds:
+          nullable: true
+          type: "number"
+      type: "object"
+    DbPerformanceSettingsV1:
+      properties:
+        lastSnapshotAt:
+          nullable: true
+          type: "string"
+        provider:
+          nullable: true
+          type: "string"
+        statsAccess:
+          nullable: true
+          type: "string"
+        statsAccessMessage:
+          nullable: true
+          type: "string"
+      type: "object"
+    DbPerformanceSnapshotV1:
+      properties:
+        cacheHitRatio:
+          nullable: true
+          type: "number"
+        capturedAt:
+          nullable: true
+          type: "string"
+        connectionsTotal:
+          nullable: true
+          type: "integer"
+        deadlocks:
+          nullable: true
+          type: "integer"
+        id:
+          nullable: true
+          type: "integer"
+        maxConnections:
+          nullable: true
+          type: "integer"
+        statementCalls:
+          nullable: true
+          type: "integer"
+        statementTotalMs:
+          nullable: true
+          type: "number"
+        status:
+          nullable: true
+          type: "string"
+        tempBytes:
+          nullable: true
+          type: "integer"
+      type: "object"
+    DbPerformanceStatementV1:
+      properties:
+        calls24h:
+          nullable: true
+          type: "integer"
+        historyPath:
+          nullable: true
+          type: "string"
+        hitRatio:
+          nullable: true
+          type: "number"
+        id:
+          nullable: true
+          type: "integer"
+        meanMs24h:
+          nullable: true
+          type: "number"
+        queryText:
+          description: "Normalized SQL, truncated to 300 characters."
+          nullable: true
+          type: "string"
+        shareOfDbTime24h:
+          nullable: true
+          type: "number"
+        totalMs24h:
+          nullable: true
+          type: "number"
+      type: "object"
+  securitySchemes:
+    sessionUuidCookie:
+      in: "cookie"
+      name: "sessionUUID"
+      type: "apiKey"
+info:
+  contact:
+    email: "contact@kingsrook.com"
+  description: "Database performance, live activity and audited query plans"
+  title: "QQQ Middleware API extension: db-performance"
+  version: "1.0.0"
+openapi: "3.0.3"
+paths:
+  /qqq/v1/qbit/db-performance/overview:
+    get:
+      description: "Requires db_performance.view and uses the caller's session."
+      operationId: "dbPerformanceOverview"
+      parameters:
+      - description: "Configured monitored backend; defaults to the qbit backend."
+        in: "query"
+        name: "backend"
+        required: false
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Invalid request"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Permission denied"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceOverviewV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Database Performance overview"
+  /qqq/v1/qbit/db-performance/activity:
+    get:
+      description: "Requires db_performance.view and uses the caller's session."
+      operationId: "dbPerformanceActivity"
+      parameters:
+      - description: "Configured monitored backend; defaults to the qbit backend."
+        in: "query"
+        name: "backend"
+        required: false
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Invalid request"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Permission denied"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceActivityV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Database Performance activity"
+  /qqq/v1/qbit/db-performance/explain:
+    post:
+      description: "PLAN requires db_performance.explain; ANALYZE requires db_performance.explain_analyze.\
+        \ Values and ANALYZE plans are never persisted."
+      operationId: "dbPerformanceExplain"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DbPerformanceExplainRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Invalid request"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Permission denied"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceExplainResultV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Explain a PostgreSQL query"
+  /qqq/v1/qbit/db-performance/statements/lookup:
+    get:
+      description: "Requires db_performance.view and uses the caller's session."
+      operationId: "dbPerformanceLookup"
+      parameters:
+      - description: "Configured monitored backend; defaults to the qbit backend."
+        in: "query"
+        name: "backend"
+        required: false
+        schema:
+          type: "string"
+      - in: "query"
+        name: "sql"
+        required: true
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Invalid request"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceErrorV1"
+          description: "Permission denied"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPerformanceLookupV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Database Performance lookup"
