@@ -570,6 +570,25 @@ class AttributionTest
 
 
    /*******************************************************************************
+    ** Only one runtime attributes per JVM: starting another stops the first, so
+    ** repeated server starts (tests, hot swaps) never pile up listeners.
+    *******************************************************************************/
+   @Test
+   void oneActiveRuntime() throws Exception
+   {
+      StatementExecutionListeners.unregister(listener);
+      runtime.startAttribution();
+      DbPerfRuntime other = new DbPerfRuntime(runtime.getInstance(), runtime.getConfig());
+      other.startAttribution();
+      runtime.stopAttribution();
+      assertThat(StatementExecutionListeners.isActive()).isTrue();
+      other.stopAttribution();
+      assertThat(StatementExecutionListeners.isActive()).isFalse();
+   }
+
+
+
+   /*******************************************************************************
     ** Deliver a statement with exact counter values.
     *******************************************************************************/
    private void synthetic(String sql, long nanos, boolean succeeded, UnitOfWork unit)
