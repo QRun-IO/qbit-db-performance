@@ -129,7 +129,7 @@ class DbPerfPresentationTest
       assertThat((Map<String, Integer>) overview.get("findingsBySeverity")).containsEntry("HIGH", 1);
       TableData queries = new DbPerfWidgetRenderer().topQueries(data);
       assertThat(queries.getRows()).hasSize(1);
-      assertThat((BigDecimal) queries.getRows().getFirst().get("% DB time")).isEqualByComparingTo("25");
+      assertThat((BigDecimal) queries.getRows().getFirst().get("Share of DB time %")).isEqualByComparingTo("25");
       assertThat(JsonUtils.toJson(queries)).contains("/app/dbPerformance/db_perf_statement/", "composite").doesNotContain("private-value");
       ChartData chart = new DbPerfWidgetRenderer().databaseTime(data);
       assertThat(chart.getChartData().getDatasets()).hasSize(2);
@@ -137,7 +137,7 @@ class DbPerfPresentationTest
       assertThat(new DbPerfWidgetRenderer().findings(data).getRows()).hasSize(1);
       assertThat(new DbPerfWidgetRenderer().tables(data).getTableDataList().getFirst().getRows()).hasSize(1);
       MultiTableData attribution = new DbPerfWidgetRenderer().attribution();
-      assertThat(attribution.getTableDataList().getFirst().getRows().getFirst()).containsEntry("Top table", "patient");
+      assertThat(JsonUtils.toJson(attribution.getTableDataList().getFirst().getRows().getFirst())).contains("top table patient");
       assertThat(attribution.getTableDataList().get(1).getRows()).hasSize(1);
       assertThat(JsonUtils.toJson(new DbPerfWidgetRenderer().connectionStatistics(data))).contains("Deadlocks", "Cache hit");
       JsonInput lookup = new JsonInput();
@@ -194,7 +194,7 @@ class DbPerfPresentationTest
       QContext.setQSession(new QSession().withPermissions(DbPerfPermissions.VIEW));
       TableData table = new DbPerfWidgetRenderer().liveActivity(fixtureData);
       assertThat(table.getRows()).hasSize(2);
-      assertThat(JsonUtils.toJson(table)).doesNotContain("private-value").contains("normalizedText", "blockingCount");
+      assertThat(JsonUtils.toJson(table)).doesNotContain("private-value").contains("select * from patient where name = ?", "blocks 1", "blocked by");
       QContext.setQSession(new QSession().withPermissions(DbPerfPermissions.VIEW, DbPerfPermissions.VIEW_LIVE_TEXT));
       assertThat(JsonUtils.toJson(new DbPerfWidgetRenderer().liveActivity(fixtureData))).doesNotContain("private-value");
    }
