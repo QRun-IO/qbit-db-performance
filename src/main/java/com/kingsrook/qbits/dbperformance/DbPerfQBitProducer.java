@@ -1,11 +1,15 @@
 /*
- * Copyright 2026 Kingsrook, LLC
+ * QQQ - Low-code Application Framework for Engineers.
+ * Copyright (C) 2021-2026.  Kingsrook, LLC
+ * 651 N Broad St Ste 205 # 6917 | Middletown DE 19709 | United States
+ * contact@kingsrook.com
+ * https://github.com/Kingsrook/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +21,13 @@
 package com.kingsrook.qbits.dbperformance;
 
 
+import java.util.ArrayList;
+import java.util.List;
+import com.kingsrook.qbits.dbperformance.metadata.DbPerfMetaData;
+import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
+import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitConfigValidationException;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaDataProducer;
 
@@ -100,4 +111,33 @@ public class DbPerfQBitProducer implements QBitMetaDataProducer<DbPerfQBitConfig
       return (qBitConfig != null);
    }
 
+   /*******************************************************************************
+    ** Validate and register the Phase A metadata.
+    *******************************************************************************/
+   @Override
+   public MetaDataProducerMultiOutput produce(QInstance instance) throws QException
+   {
+      if(qBitConfig == null)
+      {
+         throw (new QException("DB Performance configuration is required"));
+      }
+      List<String> errors = new ArrayList<>();
+      qBitConfig.validate(instance, errors);
+      for(String table : DbPerfMetaData.TABLES)
+      {
+         if(instance.getTable(table) != null)
+         {
+            errors.add("Table already registered: " + table);
+         }
+      }
+      if(!errors.isEmpty())
+      {
+         throw (new QBitConfigValidationException(qBitConfig, errors));
+      }
+      instance.addQBit(getQBitMetaData());
+      DbPerfMetaData.addTo(instance, qBitConfig);
+      new DbPerfRuntime(instance, qBitConfig).addSelfToInstance(instance);
+      com.kingsrook.qbits.dbperformance.processes.DbPerfProcesses.addTo(instance, qBitConfig);
+      return (new MetaDataProducerMultiOutput());
+   }
 }

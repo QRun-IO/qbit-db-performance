@@ -69,6 +69,46 @@
    <dependencies>
       <dependency>
          <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-backend-module-postgres</artifactId>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-backend-module-rdbms</artifactId>
+      </dependency>
+      <dependency>
+         <groupId>com.h2database</groupId>
+         <artifactId>h2</artifactId>
+         <version>2.2.224</version>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>org.liquibase</groupId>
+         <artifactId>liquibase-core</artifactId>
+         <version>4.33.0</version>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>org.postgresql</groupId>
+         <artifactId>postgresql</artifactId>
+         <version>42.7.14</version>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>org.testcontainers</groupId>
+         <artifactId>postgresql</artifactId>
+         <version>1.21.4</version>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>org.testcontainers</groupId>
+         <artifactId>junit-jupiter</artifactId>
+         <version>1.21.4</version>
+         <scope>test</scope>
+      </dependency>
+
+      <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
          <artifactId>qqq-backend-core</artifactId>
       </dependency>
 
@@ -87,6 +127,44 @@
 
    <build>
       <plugins>
+         <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <version>3.2.5</version>
+            <configuration>
+               <includes>
+                  <include>**/*Test.java</include>
+                  <include>**/*IT.java</include>
+               </includes>
+            </configuration>
+         </plugin>
+         <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-checkstyle-plugin</artifactId>
+            <version>3.3.1</version>
+            <dependencies>
+               <dependency>
+                  <groupId>com.puppycrawl.tools</groupId>
+                  <artifactId>checkstyle</artifactId>
+                  <version>10.12.6</version>
+               </dependency>
+            </dependencies>
+            <configuration>
+               <configLocation>checkstyle/config.xml</configLocation>
+               <headerLocation>checkstyle/license.txt</headerLocation>
+               <consoleOutput>true</consoleOutput>
+               <failOnViolation>true</failOnViolation>
+               <violationSeverity>warning</violationSeverity>
+               <includeTestSourceDirectory>true</includeTestSourceDirectory>
+            </configuration>
+            <executions>
+               <execution>
+                  <id>validate</id>
+                  <phase>validate</phase>
+                  <goals><goal>check</goal></goals>
+               </execution>
+            </executions>
+         </plugin>
          <plugin>
             <groupId>org.jacoco</groupId>
             <artifactId>jacoco-maven-plugin</artifactId>
@@ -138,14 +216,14 @@
    <profiles>
       <!-- Built against qqq 4.1 (QBitMetaDataProducer). Until qbit-build-parent  -->
       <!-- imports the released 4.1 BOM, this profile is active by default and     -->
-      <!-- imports qqq-bom-pom 4.1.0-RC.10 ahead of the parent's 4.0.0 BOM.         -->
+      <!-- imports qqq-bom-pom 4.1.0-RC.11 ahead of the parent's 4.0.0 BOM.         -->
       <profile>
          <id>qqq-snapshot</id>
          <activation>
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-RC.10</qqq.snapshot.version>
+            <qqq.snapshot.version>4.1.0-RC.11</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>
