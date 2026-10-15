@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import com.kingsrook.qbits.dbperformance.DbPerfRuntime;
@@ -55,11 +56,11 @@ import com.kingsrook.qqq.backend.core.model.dashboard.widgets.QWidgetData;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.TableData;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.blocks.BlockLink;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.blocks.text.TextBlockData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.blocks.text.TextStyles;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.blocks.text.TextValues;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.ConnectionManager;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaData;
-import static com.kingsrook.qbits.dbperformance.api.DbPerformanceData.fields;
 import static com.kingsrook.qbits.dbperformance.api.DbPerformanceData.map;
 import static com.kingsrook.qbits.dbperformance.api.DbPerformanceData.number;
 
@@ -169,10 +170,11 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
       List<Map<String, Object>> rows = new ArrayList<>();
       for(Map<String, Object> statement : data.statements(100, null))
       {
-         rows.add(map("Query", link((String) statement.get("queryText"), (String) statement.get("historyPath")), "Calls", statement.get("calls24h"),
-            "Mean ms", statement.get("meanMs24h"), "Total ms", statement.get("totalMs24h"), "% DB time", statement.get("shareOfDbTime24h"), "Hit ratio", statement.get("hitRatio")));
+         rows.add(map("Query", stack((String) statement.get("queryText"), (String) statement.get("historyPath"),
+               format(statement.get("calls24h")) + " calls, mean " + format(statement.get("meanMs24h")) + " ms"),
+            "Total ms (24h)", statement.get("totalMs24h"), "Share of DB time %", statement.get("shareOfDbTime24h"), "Cache hit ratio", statement.get("hitRatio")));
       }
-      TableData table = table("Top queries appear after two snapshots establish interval deltas.", rows, "Query", "Calls", "Mean ms", "Total ms", "% DB time", "Hit ratio");
+      TableData table = table("Top queries appear after two snapshots establish interval deltas.", rows, "Query", "Total ms (24h)", "Share of DB time %", "Cache hit ratio");
       table.getColumns().getFirst().setType("composite");
       return (table);
    }
@@ -210,7 +212,20 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
       List<Map<String, Object>> rows = sessions.stream().filter(row -> !((List<?>) row.get("blockedBy")).isEmpty() || ((Number) row.get("blockingCount")).intValue() > 0
          || "active".equals(row.get("state")) && numeric(row.get("querySeconds")) >= longRunning
          || Objects.toString(row.get("state"), "").startsWith("idle in transaction") && numeric(row.get("xactSeconds")) >= idle).toList();
-      return (table("No long-running or blocked sessions right now", rows, "pid", "user", "application", "state", "querySeconds", "xactSeconds", "blockedBy", "blockingCount", "normalizedText"));
+      List<Map<String, Object>> cells = new ArrayList<>();
+      for(Map<String, Object> row : rows)
+      {
+         boolean blocked = !((List<?>) row.get("blockedBy")).isEmpty();
+         int     blocking = ((Number) row.get("blockingCount")).intValue();
+         cells.add(map("Session", stack("pid " + row.get("pid") + ", " + Objects.toString(row.get("user"), "?") + ", " + Objects.toString(row.get("application"), ""), null,
+               Objects.toString(row.get("normalizedText"), "")),
+            "State", Objects.toString(row.get("state"), "") + (row.get("waitEvent") == null ? "" : " (" + row.get("waitEvent") + ")"),
+            "Query / transaction s", format(row.get("querySeconds")) + " / " + format(row.get("xactSeconds")),
+            "Blocking", blocked ? "blocked by " + row.get("blockedBy") : (blocking > 0 ? "blocks " + blocking : "")));
+      }
+      TableData table = table("No long-running or blocked sessions right now", cells, "Session", "State", "Query / transaction s", "Blocking");
+      table.getColumns().getFirst().setType("composite");
+      return (table);
    }
 
 
@@ -277,7 +292,7 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
       for(QRecord row : records)
       {
          String key = row.getValueString("unitKind") + "\n" + row.getValueString("unitName");
-         Map<String, Object> group = grouped.computeIfAbsent(key, ignored -> map("Kind", row.getValueString("unitKind"), "Unit", row.getValueString("unitName"), "Statements", 0.0, "Total ms", 0.0));
+         Map<String, Object> group = grouped.computeIfAbsent(key, ignored -> map("Kind", row.getValueString("unitKind"), "Name", row.getValueString("unitName"), "Statements", 0.0, "Total ms", 0.0));
          group.put("Statements", numeric(group.get("Statements")) + number(row, "statements"));
          group.put("Total ms", numeric(group.get("Total ms")) + number(row, "totalMs"));
          tableTimes.computeIfAbsent(key, ignored -> new LinkedHashMap<>()).merge(Objects.toString(row.getValueString("tableName"), "Unknown"), number(row, "totalMs"), Double::sum);
@@ -287,11 +302,19 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
          group.put("Share %", total == 0 ? 0 : 100 * numeric(group.get("Total ms")) / total);
          group.put("Top table", tableTimes.get(key).entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey());
       });
-      List<Map<String, Object>> units = grouped.values().stream().sorted(Comparator.comparingDouble((Map<String, Object> row) -> numeric(row.get("Total ms"))).reversed()).toList();
+      List<Map<String, Object>> units = grouped.values().stream().sorted(Comparator.comparingDouble((Map<String, Object> row) -> numeric(row.get("Total ms"))).reversed())
+         .map(row -> map("Unit of work", stack(Objects.toString(row.get("Name"), ""), null, kindLabel(row.get("Kind")) + ", top table " + row.get("Top table")),
+            "Statements", row.get("Statements"), "Total ms (24h)", row.get("Total ms"), "Share %", row.get("Share %"))).toList();
       List<Map<String, Object>> repeats = DbPerfStore.query("db_perf_repeat_pattern", since("windowEnd").withOrderBy(new QFilterOrderBy("maxRepeats", false)).withLimit(100)).stream()
-         .map(row -> fields(row, "unitKind", "unitName", "fingerprint", "unitsAffected", "maxRepeats", "totalRepeats")).toList();
-      return (new MultiTableData(List.of(table("Attribution starts after the next flush", units, "Kind", "Unit", "Statements", "Total ms", "Share %", "Top table"),
-         table("Repeated statements appear after the next attribution flush when the repetition threshold is reached.", repeats, "unitKind", "unitName", "fingerprint", "unitsAffected", "maxRepeats", "totalRepeats"))));
+         .map(row -> map("Unit of work", stack(Objects.toString(row.getValueString("unitName"), ""), null,
+               kindLabel(row.getValueString("unitKind")) + ": " + truncate(row.getValueString("sqlText"), 160)),
+            "Most repeats in one unit", row.getValue("maxRepeats"), "Units affected", row.getValue("unitsAffected"), "Total repeats", row.getValue("totalRepeats"))).toList();
+      TableData unitTable = table("Attribution starts after the next flush", units, "Unit of work", "Statements", "Total ms (24h)", "Share %");
+      unitTable.getColumns().getFirst().setType("composite");
+      TableData repeatTable = table("Repeated statements appear after the next attribution flush when the repetition threshold is reached.", repeats,
+         "Unit of work", "Most repeats in one unit", "Units affected", "Total repeats");
+      repeatTable.getColumns().getFirst().setType("composite");
+      return (new MultiTableData(List.of(unitTable, repeatTable)));
    }
 
 
@@ -303,10 +326,14 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
    {
       List<QRecord> scans = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("seqScanShare", false)).withLimit(100));
       List<QRecord> growing = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("growthBytes7d", false)).withLimit(100));
-      return (new MultiTableData(List.of(table("Table scans appear after the next table snapshot (normally hourly).", scans.stream().map(row -> fields(row, "schemaName", "tableName", "seqScan", "idxScan", "seqScanShare")).toList(),
-         "schemaName", "tableName", "seqScan", "idxScan", "seqScanShare"),
-         table("Growth appears after table history has accumulated.", growing.stream().map(row -> fields(row, "schemaName", "tableName", "totalBytes", "growthBytes7d")).toList(),
-            "schemaName", "tableName", "totalBytes", "growthBytes7d"))));
+      return (new MultiTableData(List.of(table("Table scans appear after the next table snapshot (normally hourly).", scans.stream()
+            .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Sequential scans", row.getValue("seqScan"),
+               "Index scans", row.getValue("idxScan"), "Sequential share %", row.getValue("seqScanShare"))).toList(),
+            "Table", "Sequential scans", "Index scans", "Sequential share %"),
+         table("Growth appears after table history has accumulated.", growing.stream()
+            .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Size MB", mb(row.getValue("totalBytes")),
+               "Growth MB (7 days)", mb(row.getValue("growthBytes7d")))).toList(),
+            "Table", "Size MB", "Growth MB (7 days)"))));
    }
 
 
@@ -329,6 +356,79 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
    {
       return (new CompositeWidgetData().withLayout(CompositeWidgetData.Layout.FLEX_COLUMN)
          .withBlock(new TextBlockData().withValues(new TextValues(text)).withLink(new BlockLink(path))));
+   }
+
+
+
+   /*******************************************************************************
+    ** A stacked cell: the main text (a record link when a path is given) over a
+    ** smaller secondary line, so tables keep at most four columns.
+    *******************************************************************************/
+   private static CompositeWidgetData stack(String main, String path, String secondary)
+   {
+      TextBlockData first = new TextBlockData().withValues(new TextValues(truncate(main, 300)));
+      if(path != null)
+      {
+         first.withLink(new BlockLink(path));
+      }
+      CompositeWidgetData cell = new CompositeWidgetData().withLayout(CompositeWidgetData.Layout.FLEX_COLUMN).withBlock(first);
+      if(secondary != null && !secondary.isBlank())
+      {
+         cell.withBlock(new TextBlockData().withValues(new TextValues(truncate(secondary, 300))).withStyles(new TextStyles().withColor("MUTED")));
+      }
+      return (cell);
+   }
+
+
+
+   /*******************************************************************************
+    ** Plain label for a unit-of-work kind.
+    *******************************************************************************/
+   private static String kindLabel(Object kind)
+   {
+      return (switch(Objects.toString(kind, ""))
+      {
+         case "HTTP_REQUEST" -> "Request";
+         case "SCHEDULED_JOB" -> "Scheduled job";
+         case "PROCESS" -> "Process";
+         default -> "Other";
+      });
+   }
+
+
+
+   /*******************************************************************************
+    ** Text capped with an ellipsis.
+    *******************************************************************************/
+   private static String truncate(String value, int max)
+   {
+      String text = value == null ? "" : value;
+      return (text.length() <= max ? text : text.substring(0, max - 1) + "…");
+   }
+
+
+
+   /*******************************************************************************
+    ** A number for a secondary line: whole numbers without decimals.
+    *******************************************************************************/
+   private static String format(Object value)
+   {
+      if(value == null)
+      {
+         return ("0");
+      }
+      double number = ((Number) value).doubleValue();
+      return (number == Math.rint(number) ? String.valueOf((long) number) : String.format(Locale.ROOT, "%.1f", number));
+   }
+
+
+
+   /*******************************************************************************
+    ** Bytes as whole megabytes.
+    *******************************************************************************/
+   private static Long mb(Object bytes)
+   {
+      return (bytes == null ? null : Math.round(((Number) bytes).doubleValue() / 1048576));
    }
 
 

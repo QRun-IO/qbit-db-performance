@@ -4,6 +4,9 @@ All notable changes are documented here. This project follows Keep a Changelog a
 
 ## [Unreleased]
 
+### Fixed
+- Home tables keep at most four columns with plain headers (readable at every width): secondary facts such as calls and mean time, the session's query text, and a unit's kind and top table move into a second line of the first cell.
+
 ### Added
 - QQQ attribution and N+1 detection: a core statement execution listener (QQQ 4.1.0-RC.13) aggregates database time per route, scheduled job, process, table and statement shape in bounded memory, records repeated statement shapes per unit of work, and each pod flushes one batched insert per table every `attribution_flush_seconds`. Hosts without QQQ's application launcher call `DbPerfRuntime.of(instance).startAttribution()` after startup.
 
