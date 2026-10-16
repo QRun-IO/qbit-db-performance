@@ -25,17 +25,27 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import com.kingsrook.qbits.dbperformance.DbPerfRuntime;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
+import com.kingsrook.qqq.backend.core.actions.tables.AggregateAction;
+import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.Aggregate;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateResult;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.GroupBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 
 
 /*******************************************************************************
@@ -130,7 +140,7 @@ public class RuleContext
          {
             filter.withCriteria(new QFilterCriteria("backendName", QCriteriaOperator.EQUALS, backend));
          }
-         List<QRecord> rows = read("db_perf_" + suffix, filter);
+         List<QRecord> rows = suffix.equals("attribution") ? attributionTotals(filter) : read("db_perf_" + suffix, filter);
          if(!Set.of("snapshot", "attribution", "repeat_pattern").contains(suffix))
          {
             Set<Integer> ids = window("snapshot", days).stream()
@@ -142,6 +152,52 @@ public class RuleContext
       }
       return (cache.get(key));
    }
+
+
+   /*******************************************************************************
+    ** Most attribution groups the rules receive (prod: ~2,000 per day).
+    *******************************************************************************/
+   public static final int MAX_ATTRIBUTION_GROUPS = 50_000;
+
+
+
+   /*******************************************************************************
+    ** Attribution summed in the database per unit, table and operation: the
+    ** fields the rules read (statements, totalMs and the other counters), never
+    ** the day's detail rows. A day is ~570,000 rows in kof22 and loading it made
+    ** every hourly dbPerfAnalyze fill the worker heap (2026-10-16).
+    *******************************************************************************/
+   private static List<QRecord> attributionTotals(QQueryFilter filter) throws QException
+   {
+      List<String> dimensions = List.of("unitKind", "unitName", "tableName", "operation");
+      AggregateInput input = new AggregateInput("db_perf_attribution").withFilter(filter).withLimit(MAX_ATTRIBUTION_GROUPS)
+         .withTransaction(QContext.getQBackendTransaction());
+      Map<String, GroupBy> groupBys = new LinkedHashMap<>();
+      for(String dimension : dimensions)
+      {
+         GroupBy groupBy = new GroupBy(QFieldType.STRING, dimension);
+         groupBys.put(dimension, groupBy);
+         input.withGroupBy(groupBy);
+      }
+      Map<String, Aggregate> aggregates = new LinkedHashMap<>();
+      for(String counter : List.of("units", "statements", "rowsCount", "errors", "totalMs"))
+      {
+         aggregates.put(counter, new Aggregate(counter, AggregateOperator.SUM));
+      }
+      aggregates.put("maxMs", new Aggregate("maxMs", AggregateOperator.MAX));
+      aggregates.values().forEach(input::withAggregate);
+
+      List<QRecord> rows = new ArrayList<>();
+      for(AggregateResult result : new AggregateAction().execute(input).getResults())
+      {
+         QRecord row = new QRecord();
+         groupBys.forEach((field, groupBy) -> row.setValue(field, result.getGroupByValue(groupBy)));
+         aggregates.forEach((field, aggregate) -> row.setValue(field, result.getAggregateValue(aggregate)));
+         rows.add(row);
+      }
+      return (rows);
+   }
+
 
 
    /*******************************************************************************

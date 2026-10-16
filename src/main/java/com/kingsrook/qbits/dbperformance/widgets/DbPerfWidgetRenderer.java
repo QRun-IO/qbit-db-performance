@@ -39,8 +39,15 @@ import com.kingsrook.qbits.dbperformance.collect.SnapshotCollector;
 import com.kingsrook.qbits.dbperformance.provider.ConnectionCount;
 import com.kingsrook.qbits.dbperformance.provider.DbStatsProviders;
 import com.kingsrook.qqq.backend.core.actions.dashboard.widgets.AbstractWidgetRenderer;
+import com.kingsrook.qqq.backend.core.actions.tables.AggregateAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.Aggregate;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateResult;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.GroupBy;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.QFilterOrderByAggregate;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
@@ -59,6 +66,7 @@ import com.kingsrook.qqq.backend.core.model.dashboard.widgets.blocks.text.TextBl
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.blocks.text.TextStyles;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.blocks.text.TextValues;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.ConnectionManager;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaData;
 import static com.kingsrook.qbits.dbperformance.api.DbPerformanceData.map;
@@ -281,21 +289,44 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
 
 
    /*******************************************************************************
+    ** Most (unit, table) groups summed for the attribution panel. Production
+    ** shows about a thousand; the cap only guards pathological unit names.
+    *******************************************************************************/
+   public static final int MAX_ATTRIBUTION_GROUPS = 5000;
+
+
+
+   /*******************************************************************************
     ** Aggregate units over 24 hours and show repeated-statement patterns below them.
+    ** The sums run in the database: a day of attribution detail is hundreds of
+    ** thousands of rows (about 540 MB), and loading it into the heap on a widget
+    ** request ran the web pod out of memory (2026-10-16).
     *******************************************************************************/
    public MultiTableData attribution() throws QException
    {
-      List<QRecord> records = DbPerfStore.query("db_perf_attribution", since("windowEnd"));
+      GroupBy kindGroup = new GroupBy(QFieldType.STRING, "unitKind");
+      GroupBy nameGroup = new GroupBy(QFieldType.STRING, "unitName");
+      GroupBy tableGroup = new GroupBy(QFieldType.STRING, "tableName");
+      Aggregate statementsSum = new Aggregate("statements", AggregateOperator.SUM);
+      Aggregate totalMsSum = new Aggregate("totalMs", AggregateOperator.SUM);
+      List<AggregateResult> results = new AggregateAction().execute(new AggregateInput("db_perf_attribution")
+         .withFilter(since("windowEnd").withOrderBy(new QFilterOrderByAggregate(totalMsSum, false)))
+         .withGroupBy(kindGroup).withGroupBy(nameGroup).withGroupBy(tableGroup)
+         .withAggregate(statementsSum).withAggregate(totalMsSum)
+         .withLimit(MAX_ATTRIBUTION_GROUPS)
+         .withTransaction(QContext.getQBackendTransaction())).getResults();
       Map<String, Map<String, Object>> grouped = new LinkedHashMap<>();
       Map<String, Map<String, Double>> tableTimes = new LinkedHashMap<>();
-      double total = records.stream().mapToDouble(row -> number(row, "totalMs")).sum();
-      for(QRecord row : records)
+      double total = results.stream().mapToDouble(row -> numeric(row.getAggregateValue(totalMsSum))).sum();
+      for(AggregateResult row : results)
       {
-         String key = row.getValueString("unitKind") + "\n" + row.getValueString("unitName");
-         Map<String, Object> group = grouped.computeIfAbsent(key, ignored -> map("Kind", row.getValueString("unitKind"), "Name", row.getValueString("unitName"), "Statements", 0.0, "Total ms", 0.0));
-         group.put("Statements", numeric(group.get("Statements")) + number(row, "statements"));
-         group.put("Total ms", numeric(group.get("Total ms")) + number(row, "totalMs"));
-         tableTimes.computeIfAbsent(key, ignored -> new LinkedHashMap<>()).merge(Objects.toString(row.getValueString("tableName"), "Unknown"), number(row, "totalMs"), Double::sum);
+         String kind = (String) row.getGroupByValue(kindGroup);
+         String name = (String) row.getGroupByValue(nameGroup);
+         String key = kind + "\n" + name;
+         Map<String, Object> group = grouped.computeIfAbsent(key, ignored -> map("Kind", kind, "Name", name, "Statements", 0.0, "Total ms", 0.0));
+         group.put("Statements", numeric(group.get("Statements")) + numeric(row.getAggregateValue(statementsSum)));
+         group.put("Total ms", numeric(group.get("Total ms")) + numeric(row.getAggregateValue(totalMsSum)));
+         tableTimes.computeIfAbsent(key, ignored -> new LinkedHashMap<>()).merge(Objects.toString(row.getGroupByValue(tableGroup), "Unknown"), numeric(row.getAggregateValue(totalMsSum)), Double::sum);
       }
       grouped.forEach((key, group) ->
       {
