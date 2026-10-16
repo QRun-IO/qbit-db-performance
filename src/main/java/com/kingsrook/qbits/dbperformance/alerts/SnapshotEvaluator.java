@@ -22,9 +22,11 @@ package com.kingsrook.qbits.dbperformance.alerts;
 
 
 import java.time.Instant;
-import java.util.Comparator;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import com.kingsrook.qbits.dbperformance.DbPerfQBitConfig;
 import com.kingsrook.qbits.dbperformance.DbPerfRuntime;
@@ -38,6 +40,9 @@ import com.kingsrook.qqq.backend.core.alerts.AlertsInstanceMetaData;
 import com.kingsrook.qqq.backend.core.alerts.QAlertTypeMetaData;
 import com.kingsrook.qqq.backend.core.alerts.QAlerts;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 
@@ -159,33 +164,31 @@ public class SnapshotEvaluator
     *******************************************************************************/
    private void spikes(RuleContext ctx, QRecord snapshot) throws Exception
    {
-      Map<Integer, List<QRecord>> history = ctx.window("query_snapshot", 7).stream().collect(Collectors.groupingBy(r -> r.getValueInteger("statementId")));
+      Map<Integer, StatementHistory> history = history(ctx, snapshot.getValueInteger("id"));
       for(QRecord statement : ctx.identities("statement"))
       {
-         List<QRecord> samples = history.getOrDefault(statement.getValueInteger("id"), List.of());
-         QRecord current = samples.stream().filter(r -> snapshot.getValueInteger("id").equals(r.getValueInteger("snapshotId"))).findFirst().orElse(null);
-         if(current == null)
+         StatementHistory samples = history.getOrDefault(statement.getValueInteger("id"), new StatementHistory());
+         if(samples.current == null)
          {
-            Instant last = samples.stream().map(r -> r.getValueInstant("capturedAt")).max(Comparator.naturalOrder()).orElse(Instant.EPOCH);
+            Instant last = samples.last == null ? Instant.EPOCH : samples.last;
             if(!last.plusSeconds(3600).isAfter(ctx.now))
             {
                signal(QUERY_SPIKE, ctx.backend, statement.getValueString("id"), false, "Query absent", "Statement absent from snapshots for at least one hour", statement, "db_perf_statement");
             }
             continue;
          }
-         List<Double> previous = samples.stream().filter(r -> r.getValueInstant("capturedAt").isBefore(ctx.now))
-            .map(r -> RuleContext.number(r, "totalMs")).sorted().toList();
-         if(previous.size() < 12)
+         double[] previous = samples.sortedPrevious();
+         if(previous.length < 12)
          {
-            if(RuleContext.number(current, "totalMs") < RuleContext.number(ctx.settings, "spikeMinTotalMs"))
+            if(samples.current < RuleContext.number(ctx.settings, "spikeMinTotalMs"))
             {
                signal(QUERY_SPIKE, ctx.backend, statement.getValueString("id"), false, "Query recovered", "Interval time is below the configured floor", statement, "db_perf_statement");
             }
             continue;
          }
-         int middle = previous.size() / 2;
-         double median = previous.size() % 2 == 0 ? (previous.get(middle - 1) + previous.get(middle)) / 2 : previous.get(middle);
-         double time = RuleContext.number(current, "totalMs");
+         int middle = previous.length / 2;
+         double median = previous.length % 2 == 0 ? (previous[middle - 1] + previous[middle]) / 2 : previous[middle];
+         double time = samples.current;
          boolean spike = time >= RuleContext.number(ctx.settings, "spikeMinTotalMs") && time >= median * RuleContext.number(ctx.settings, "spikeFactor");
          String normalized = SqlNormalizer.normalize(statement.getValueString("queryText"));
          String text = normalized.substring(0, Math.min(200, normalized.length()));
@@ -193,6 +196,90 @@ public class SnapshotEvaluator
             "Statement " + statement.getValueInteger("id") + ": " + time + " ms; prior median " + median + " ms. " + text, statement, "db_perf_statement");
       }
    }
+
+
+   /*******************************************************************************
+    ** Seven days of per-statement interval times, read in keyset pages and kept
+    ** as primitive doubles. kof22 writes ~33,000 query snapshots a day, so the
+    ** window is ~230,000 rows; holding them as QRecords on every snapshot
+    ** evaluation cost hundreds of MB of worker heap.
+    *******************************************************************************/
+   static Map<Integer, StatementHistory> history(RuleContext ctx, Integer currentSnapshotId) throws Exception
+   {
+      Set<Integer> valid = ctx.window("snapshot", 7).stream().filter(r -> List.of("OK", "PARTIAL").contains(r.getValueString("status")))
+         .map(r -> r.getValueInteger("id")).collect(Collectors.toSet());
+      QQueryFilter filter = new QQueryFilter(new QFilterCriteria("capturedAt", QCriteriaOperator.GREATER_THAN, ctx.now.minusSeconds(7 * 86400L)),
+         new QFilterCriteria("capturedAt", QCriteriaOperator.LESS_THAN_OR_EQUALS, ctx.now));
+      Map<Integer, StatementHistory> history = new HashMap<>();
+      DbPerfStore.forEachPage("db_perf_query_snapshot", filter, DbPerfStore.BATCH_SIZE, page ->
+      {
+         for(QRecord row : page)
+         {
+            Integer snapshotId = row.getValueInteger("snapshotId");
+            if(!valid.contains(snapshotId))
+            {
+               continue;
+            }
+            StatementHistory statement = history.computeIfAbsent(row.getValueInteger("statementId"), ignored -> new StatementHistory());
+            Instant at = row.getValueInstant("capturedAt");
+            double totalMs = RuleContext.number(row, "totalMs");
+            if(statement.last == null || at.isAfter(statement.last))
+            {
+               statement.last = at;
+            }
+            if(snapshotId.equals(currentSnapshotId) && statement.current == null)
+            {
+               statement.current = totalMs;
+            }
+            if(at.isBefore(ctx.now))
+            {
+               statement.add(totalMs);
+            }
+         }
+      });
+      return (history);
+   }
+
+
+
+   /*******************************************************************************
+    ** One statement's samples: the current interval, the latest capture time
+    ** and earlier interval times.
+    *******************************************************************************/
+   static final class StatementHistory
+   {
+      private Double   current;
+      private Instant  last;
+      private double[] previous = new double[16];
+      private int      size;
+
+
+
+      /***************************************************************************
+       ** Append an earlier interval time.
+       ***************************************************************************/
+      void add(double value)
+      {
+         if(size == previous.length)
+         {
+            previous = Arrays.copyOf(previous, size * 2);
+         }
+         previous[size++] = value;
+      }
+
+
+
+      /***************************************************************************
+       ** Earlier interval times, ascending.
+       ***************************************************************************/
+      double[] sortedPrevious()
+      {
+         double[] sorted = Arrays.copyOf(previous, size);
+         Arrays.sort(sorted);
+         return (sorted);
+      }
+   }
+
 
 
    /*******************************************************************************
