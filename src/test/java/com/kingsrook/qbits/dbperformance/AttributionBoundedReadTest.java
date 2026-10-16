@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.kingsrook.qbits.dbperformance.analyze.RuleContext;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
 import com.kingsrook.qbits.dbperformance.collect.RollupService;
 import com.kingsrook.qbits.dbperformance.widgets.DbPerfWidgetRenderer;
@@ -48,9 +49,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /*******************************************************************************
  ** Attribution detail grows by hundreds of thousands of rows a day. On
  ** 2026-10-16 the home widget loaded a whole day of it into the heap and ran
- ** the kof22 web pod out of memory. These tests count every attribution
- ** detail record QQQ materializes, so neither the widget nor the daily rollup
- ** can go back to reading the table in one unbounded query.
+ ** the kof22 web pod out of memory, and the hourly analysis filled the worker
+ ** heap the same way. These tests count every attribution detail record QQQ
+ ** materializes, so the widget, the analysis and the daily rollup cannot go
+ ** back to reading the table in one unbounded query.
  *******************************************************************************/
 class AttributionBoundedReadTest
 {
@@ -131,6 +133,29 @@ class AttributionBoundedReadTest
       insert(3, i -> row(now.minusSeconds(3 * 86400), now.minusSeconds(2 * 86400), i));
       List<Map<String, Object>> units = new DbPerfWidgetRenderer().attribution().getTableDataList().getFirst().getRows();
       assertThat(units).hasSize(3).allSatisfy(unit -> assertThat(((Number) unit.get("Statements")).doubleValue()).isEqualTo(2.0));
+   }
+
+
+
+   /*******************************************************************************
+    ** The hourly analysis reads attribution as database sums per unit, table
+    ** and operation: no detail rows, same totals.
+    *******************************************************************************/
+   @Test
+   void analysisSumsInTheDatabase() throws Exception
+   {
+      Instant now = Instant.now();
+      insert(3000, i -> row(now.minusSeconds(60), now, i));
+      LOADED.set(0);
+      RuleContext context = new RuleContext(runtime, runtime.getConfig().getBackendName(), new QRecord(), new QRecord(), now.plusSeconds(1));
+
+      List<QRecord> rows = context.window("attribution", 1);
+
+      assertThat(LOADED.get()).as("attribution detail rows loaded by the analysis").isZero();
+      assertThat(rows).hasSize(6);
+      assertThat(rows.stream().mapToDouble(row -> RuleContext.number(row, "statements")).sum()).isEqualTo(6000.0);
+      assertThat(rows.stream().mapToDouble(row -> RuleContext.number(row, "totalMs")).sum()).isEqualTo(1500 * 10.0 + 1500 * 1.0);
+      assertThat(rows).allSatisfy(row -> assertThat(row.getValueString("operation")).isEqualTo("SELECT"));
    }
 
 
