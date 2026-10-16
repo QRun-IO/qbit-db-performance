@@ -168,7 +168,19 @@ public class RollupService
    {
       Map<String, QRecord> groups = new LinkedHashMap<>();
       List<String> dimensions = List.of("unitKind", "unitName", "processName", "tableName", "operation", "fingerprint");
-      for(QRecord row : DbPerfStore.query("db_perf_attribution", range("windowStart", start, end)))
+      DbPerfStore.forEachPage("db_perf_attribution", range("windowStart", start, end), DbPerfStore.BATCH_SIZE, page -> mergeAttribution(day, page, dimensions, groups));
+      replace("db_perf_attribution_daily", day, new ArrayList<>(groups.values()));
+   }
+
+
+
+   /*******************************************************************************
+    ** Fold one page of attribution detail into the day's groups. Memory is
+    ** bounded by distinct dimension keys, never by the day's detail row count.
+    *******************************************************************************/
+   private static void mergeAttribution(LocalDate day, List<QRecord> page, List<String> dimensions, Map<String, QRecord> groups)
+   {
+      for(QRecord row : page)
       {
          StringBuilder key = new StringBuilder();
          for(String field : dimensions)
@@ -187,7 +199,6 @@ public class RollupService
          sumDecimal(aggregate, row, "totalMs");
          aggregate.setValue("maxMs", SnapshotCollector.decimal(aggregate, "maxMs").max(SnapshotCollector.decimal(row, "maxMs")));
       }
-      replace("db_perf_attribution_daily", day, new ArrayList<>(groups.values()));
    }
 
 

@@ -67,6 +67,48 @@ public final class DbPerfStore
 
 
    /*******************************************************************************
+    ** Keyset-paged read for tables that can hold more rows than fit in the heap
+    ** (attribution writes hundreds of thousands per day). At most pageSize
+    ** records are held at once; the consumer must not keep the page.
+    *******************************************************************************/
+   public static void forEachPage(String table, QQueryFilter filter, int pageSize, PageConsumer consumer) throws Exception
+   {
+      Serializable lastId = 0;
+      while(true)
+      {
+         QQueryFilter page = new QQueryFilter().withSubFilter(filter).withCriteria(new QFilterCriteria("id", QCriteriaOperator.GREATER_THAN, lastId))
+            .withOrderBy(new QFilterOrderBy("id", true)).withLimit(pageSize);
+         List<QRecord> rows = query(table, page);
+         if(rows.isEmpty())
+         {
+            return;
+         }
+         consumer.accept(rows);
+         if(rows.size() < pageSize)
+         {
+            return;
+         }
+         lastId = rows.getLast().getValue("id");
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** Receives one bounded page from forEachPage.
+    *******************************************************************************/
+   @FunctionalInterface
+   public interface PageConsumer
+   {
+      /***************************************************************************
+       ** Handle one page.
+       ***************************************************************************/
+      void accept(List<QRecord> page) throws Exception;
+   }
+
+
+
+   /*******************************************************************************
     ** First matching record.
     *******************************************************************************/
    public static QRecord first(String table, QQueryFilter filter) throws QException
