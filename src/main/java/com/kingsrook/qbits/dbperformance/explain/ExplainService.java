@@ -38,6 +38,10 @@ import com.kingsrook.qbits.dbperformance.collect.DbPerfSettingsService;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
 import com.kingsrook.qbits.dbperformance.collect.SnapshotCollector;
 import com.kingsrook.qbits.dbperformance.normalize.SqlNormalizer;
+import com.kingsrook.qbits.dbperformance.provider.DbStatsProvider;
+import com.kingsrook.qbits.dbperformance.provider.DbStatsProviders;
+import com.kingsrook.qbits.dbperformance.provider.ProviderCapabilities;
+import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
@@ -135,8 +139,9 @@ public class ExplainService
          boolean generic = !analyze && parsed.parameterCount() > 0;
          audit.setValue("mode", analyze ? "ANALYZE" : generic ? "GENERIC" : "PLAN");
          QRecord settings = new DbPerfSettingsService(runtime).ensure(request.backendName());
-         json = execute(parsed.sql(), parameters, analyze, generic, SnapshotCollector.positive(settings, "explainTimeoutMs", 10000));
-         plan = PlanTextRenderer.render(json);
+         Explained explained = execute(parsed, parameters, analyze, generic, SnapshotCollector.positive(settings, "explainTimeoutMs", 10000));
+         json = explained.json();
+         plan = explained.plan();
          if(!analyze && (storedStatement || sql.equals(SqlNormalizer.normalize(sql))))
          {
             audit.setValue("planJson", json);
@@ -181,7 +186,7 @@ public class ExplainService
       }
       return (new ExplainResult(audit.getValueString("mode"), json, plan.text(), plan.totalCost(), plan.actualTotalMs(), warnings,
          audit.getValueInteger("id"), runtime.getConfig().getSqlWorkbenchRunnerPath() + "?sql=" + encode("EXPLAIN " + sql) + "&backend=" + encode(request.backendName()),
-         "Explain this PostgreSQL query plan and suggest improvements.\n\nQuery:\n" + SqlNormalizer.normalize(sql) + "\n\nPlan:\n" + plan.safeText()));
+         "Explain this " + (json == null ? "database" : "PostgreSQL") + " query plan and suggest improvements.\n\nQuery:\n" + SqlNormalizer.normalize(sql) + "\n\nPlan:\n" + plan.safeText()));
    }
 
 
@@ -190,84 +195,136 @@ public class ExplainService
     ** Roll back even on parse, execution or timeout failure, deallocate after rollback,
     ** and restore pool state before releasing this dedicated connection.
     *******************************************************************************/
-   private String execute(String sql, List<String> parameters, boolean analyze, boolean generic, int timeout) throws Exception
+   private Explained execute(ExplainSql.Parsed parsed, List<String> parameters, boolean analyze, boolean generic, int timeout) throws Exception
    {
       try(Connection connection = openConnection())
       {
          if(!"PostgreSQL".equals(connection.getMetaData().getDatabaseProductName()))
          {
-            throw (new QBadRequestException("Query plans currently require PostgreSQL."));
-         }
-         if(generic && connection.getMetaData().getDatabaseMajorVersion() < 16)
-         {
-            throw (new QBadRequestException("Generic plans require PostgreSQL 16 or later. Use ANALYZE with parameter values if authorized."));
-         }
-         boolean autoCommit = connection.getAutoCommit();
-         boolean readOnly = connection.isReadOnly();
-         String preparedName = "dbperf_" + UUID.randomUUID().toString().replace("-", "");
-         boolean prepared = false;
-         try
-         {
-            connection.setAutoCommit(false);
-            try(Statement statement = connection.createStatement())
+            //////////////////////////////////////////////////////////////////
+            // other vendors plan through their provider as text (no JSON) //
+            //////////////////////////////////////////////////////////////////
+            DbStatsProvider provider = DbStatsProviders.forConnection(connection);
+            ProviderCapabilities capability = provider.capabilities(connection);
+            if(!capability.has(StatsFeature.EXPLAIN_TEXT) || generic && !capability.has(StatsFeature.EXPLAIN_GENERIC))
             {
-               statement.execute("SET TRANSACTION READ ONLY");
-               statement.execute("SET LOCAL statement_timeout = " + timeout);
-               statement.execute("SET LOCAL standard_conforming_strings = on");
-               if(!analyze)
-               {
-                  // GENERIC_PLAN must not be parsed as an external JDBC bind request.
-                  statement.unwrap(PgStatement.class).executeWithFlags("EXPLAIN (" + (generic ? "GENERIC_PLAN, " : "") + "FORMAT JSON) " + sql, QueryExecutor.QUERY_EXECUTE_AS_SIMPLE);
-                  try(ResultSet rows = statement.getResultSet())
-                  {
-                     rows.next();
-                     return (rows.getString(1));
-                  }
-               }
-               statement.execute("PREPARE " + preparedName + " AS " + sql);
-               prepared = true;
+               throw (new QBadRequestException("Query plans are not available for this database (" + provider.getName() + ")."));
             }
-            String arguments = parameters.isEmpty() ? "" : "(" + String.join(", ", Collections.nCopies(parameters.size(), "?")) + ")";
-            try(PreparedStatement statement = connection.prepareStatement("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE " + preparedName + arguments))
+            if(analyze && !capability.has(StatsFeature.EXPLAIN_ANALYZE))
             {
-               for(int i = 0; i < parameters.size(); i++)
+               throw (new QBadRequestException("ANALYZE is not available on this " + provider.getName() + " connection (it would execute the query without a read-only transaction). Use PLAN."));
+            }
+            String text;
+            try
+            {
+               text = provider.explainText(connection, parsed.indexedSql(), parameters, analyze, timeout);
+            }
+            catch(java.sql.SQLException e)
+            {
+               if("42000".equals(e.getSQLState()) && e.getMessage() != null && e.getMessage().contains("H2"))
                {
-                  statement.setObject(i + 1, parameters.get(i), Types.OTHER);
+                  throw (new QBadRequestException(e.getMessage()));
                }
-               // EXECUTE's arguments are utility expressions: unknown bind types cannot
-               // be inferred in extended Parse. Keep JDBC binding/escaping, but send this
-               // one command in simple mode so PostgreSQL coerces the quoted strings.
-               statement.unwrap(PgStatement.class).executeWithFlags(QueryExecutor.QUERY_EXECUTE_AS_SIMPLE);
+               throw (e);
+            }
+            return (new Explained(null, new PlanTextRenderer.Plan(text, PlanTextRenderer.redactText(text), null, null)));
+         }
+         return (new Explained(postgres(connection, parsed.sql(), parameters, analyze, generic, timeout), null).rendered());
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** PostgreSQL JSON plan; see {@link #execute}.
+    *******************************************************************************/
+   private String postgres(Connection connection, String sql, List<String> parameters, boolean analyze, boolean generic, int timeout) throws Exception
+   {
+      if(generic && connection.getMetaData().getDatabaseMajorVersion() < 16)
+      {
+         throw (new QBadRequestException("Generic plans require PostgreSQL 16 or later. Use ANALYZE with parameter values if authorized."));
+      }
+      boolean autoCommit = connection.getAutoCommit();
+      boolean readOnly = connection.isReadOnly();
+      String preparedName = "dbperf_" + UUID.randomUUID().toString().replace("-", "");
+      boolean prepared = false;
+      try
+      {
+         connection.setAutoCommit(false);
+         try(Statement statement = connection.createStatement())
+         {
+            statement.execute("SET TRANSACTION READ ONLY");
+            statement.execute("SET LOCAL statement_timeout = " + timeout);
+            statement.execute("SET LOCAL standard_conforming_strings = on");
+            if(!analyze)
+            {
+               // GENERIC_PLAN must not be parsed as an external JDBC bind request.
+               statement.unwrap(PgStatement.class).executeWithFlags("EXPLAIN (" + (generic ? "GENERIC_PLAN, " : "") + "FORMAT JSON) " + sql, QueryExecutor.QUERY_EXECUTE_AS_SIMPLE);
                try(ResultSet rows = statement.getResultSet())
                {
                   rows.next();
                   return (rows.getString(1));
                }
             }
+            statement.execute("PREPARE " + preparedName + " AS " + sql);
+            prepared = true;
+         }
+         String arguments = parameters.isEmpty() ? "" : "(" + String.join(", ", Collections.nCopies(parameters.size(), "?")) + ")";
+         try(PreparedStatement statement = connection.prepareStatement("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE " + preparedName + arguments))
+         {
+            for(int i = 0; i < parameters.size(); i++)
+            {
+               statement.setObject(i + 1, parameters.get(i), Types.OTHER);
+            }
+            // EXECUTE's arguments are utility expressions: unknown bind types cannot
+            // be inferred in extended Parse. Keep JDBC binding/escaping, but send this
+            // one command in simple mode so PostgreSQL coerces the quoted strings.
+            statement.unwrap(PgStatement.class).executeWithFlags(QueryExecutor.QUERY_EXECUTE_AS_SIMPLE);
+            try(ResultSet rows = statement.getResultSet())
+            {
+               rows.next();
+               return (rows.getString(1));
+            }
+         }
+      }
+      finally
+      {
+         try
+         {
+            connection.rollback();
+            if(prepared)
+            {
+               try(Statement cleanup = connection.createStatement())
+               {
+                  cleanup.execute("DEALLOCATE " + preparedName);
+               }
+               finally
+               {
+                  connection.rollback();
+               }
+            }
          }
          finally
          {
-            try
-            {
-               connection.rollback();
-               if(prepared)
-               {
-                  try(Statement cleanup = connection.createStatement())
-                  {
-                     cleanup.execute("DEALLOCATE " + preparedName);
-                  }
-                  finally
-                  {
-                     connection.rollback();
-                  }
-               }
-            }
-            finally
-            {
-               connection.setReadOnly(readOnly);
-               connection.setAutoCommit(autoCommit);
-            }
+            connection.setReadOnly(readOnly);
+            connection.setAutoCommit(autoCommit);
          }
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** Raw plan (JSON for PostgreSQL, null for text-plan vendors) and its rendering.
+    *******************************************************************************/
+   private record Explained(String json, PlanTextRenderer.Plan plan)
+   {
+      /*******************************************************************************
+       ** Render a PostgreSQL JSON plan.
+       *******************************************************************************/
+      Explained rendered() throws Exception
+      {
+         return (new Explained(json, PlanTextRenderer.render(json)));
       }
    }
 

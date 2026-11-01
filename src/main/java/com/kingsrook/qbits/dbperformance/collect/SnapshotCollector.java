@@ -47,6 +47,7 @@ import com.kingsrook.qbits.dbperformance.provider.IndexStats;
 import com.kingsrook.qbits.dbperformance.provider.ProviderCapabilities;
 import com.kingsrook.qbits.dbperformance.provider.SessionInfo;
 import com.kingsrook.qbits.dbperformance.provider.StatementStats;
+import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 import com.kingsrook.qbits.dbperformance.provider.TableStats;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
@@ -217,7 +218,7 @@ public class SnapshotCollector
       Instant now = snapshot.getValueInstant("capturedAt");
       QQueryFilter filter = DbPerfStore.eq("backendName", backendName)
          .withCriteria(new QFilterCriteria("status", QCriteriaOperator.IN, List.of("OK", "PARTIAL")))
-         .withCriteria(new QFilterCriteria("rawXactCommit", QCriteriaOperator.IS_NOT_BLANK))
+         .withCriteria(new QFilterCriteria("databaseSizeBytes", QCriteriaOperator.IS_NOT_BLANK))
          .withOrderBy(new QFilterOrderBy("capturedAt", false));
       QRecord previous = DbPerfStore.first("db_perf_snapshot", filter);
       Instant previousCapture = previous == null ? null : previous.getValueInstant("capturedAt");
@@ -256,8 +257,9 @@ public class SnapshotCollector
                }
             }
             snapshot.withValue("rawStatsReset", database.statsReset()).withValue("statsResetDetected", databaseReset)
-               .withValue("databaseSizeBytes", database.sizeBytes()).withValue("maxConnections", database.maxConnections())
-               .withValue("cacheHitRatio", ratio(number(snapshot, "blksHit"), number(snapshot, "blksHit") + number(snapshot, "blksRead")));
+               .withValue("databaseSizeBytes", database.sizeBytes())
+               .withValue("cacheHitRatio", capability.has(StatsFeature.CACHE_COUNTERS) ? ratio(number(snapshot, "blksHit"), number(snapshot, "blksHit") + number(snapshot, "blksRead")) : null)
+               .withValue("maxConnections", capability.has(StatsFeature.MAX_CONNECTIONS) ? database.maxConnections() : null);
             if(capability.statements())
             {
                Instant reset = provider.readStatementResetInfo(connection).statsReset();
@@ -441,8 +443,8 @@ public class SnapshotCollector
          QRecord row = new QRecord().withValue("backendName", backend).withValue("schemaName", entry.schemaName()).withValue("tableName", entry.tableName()).withValue("relid", entry.relid()).withValue("lastSeenAt", now);
          entry.counters().forEach(row::setValue);
          entry.maintenance().forEach(row::setValue);
-         row.withValue("deadRatio", ratio(number(row, "nDeadTup"), number(row, "nLiveTup") + number(row, "nDeadTup")))
-            .withValue("seqScanShare", ratio(number(row, "seqScan"), number(row, "seqScan") + number(row, "idxScan")));
+         row.withValue("deadRatio", entry.counters().containsKey("nDeadTup") ? ratio(number(row, "nDeadTup"), number(row, "nLiveTup") + number(row, "nDeadTup")) : null)
+            .withValue("seqScanShare", entry.counters().containsKey("seqScan") ? ratio(number(row, "seqScan"), number(row, "seqScan") + number(row, "idxScan")) : null);
          if(old == null)
          {
             inserts.add(row);

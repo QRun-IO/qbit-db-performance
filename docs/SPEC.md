@@ -47,7 +47,9 @@ actions      └► Attribution aggregator (memory) │        │ Analyze → f
   `explain(...)`. `PostgresStatsProvider` is the v1 implementation (PostgreSQL 13+, features that
   need 16+/17 such as `EXPLAIN (GENERIC_PLAN)` and per-entry `stats_since` are detected).
   The provider is chosen per monitored backend from the JDBC vendor; an unsupported vendor is
-  reported in the Setup card, never a crash.
+  reported in the Setup card, never a crash. `H2StatsProvider` (H2 2.x, `INFORMATION_SCHEMA`)
+  followed; providers declare per-area `StatsFeature`s and rules are skipped where an area is
+  missing. See [PROVIDERS.md](PROVIDERS.md).
 - **Connections** are the backend's own (QQQ `ConnectionManager`), so they run as the app's
   database user. That user needs the built-in `pg_read_all_stats` role to see other sessions'
   query text and all statements; without it the qbit runs in a reduced mode and the Setup card and

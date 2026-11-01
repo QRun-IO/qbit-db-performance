@@ -36,6 +36,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import com.kingsrook.qbits.dbperformance.normalize.SqlNormalizer;
+import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 
 
@@ -58,6 +59,30 @@ public enum StoredRule implements DbPerfRule
    {
       return (name());
    }
+
+
+   /*******************************************************************************
+    ** Provider areas behind each rule's evidence; attribution rules need none.
+    *******************************************************************************/
+   @Override
+   public Set<StatsFeature> requires()
+   {
+      return (switch(this)
+      {
+         case SLOW_QUERY -> Set.of(StatsFeature.STATEMENTS);
+         case MISSING_INDEX, OVER_AUDITED -> Set.of(StatsFeature.TABLE_ACCESS);
+         case UNUSED_INDEX -> Set.of(StatsFeature.INDEX_USAGE);
+         case DUPLICATE_INDEX -> Set.of(StatsFeature.INDEX_DEFINITIONS);
+         case BLOAT, VACUUM_STALE -> Set.of(StatsFeature.TABLE_MAINTENANCE);
+         case POOL_SIZING -> Set.of(StatsFeature.MAX_CONNECTIONS, StatsFeature.CONNECTIONS);
+         case IDLE_IN_TRANSACTION -> Set.of(StatsFeature.SESSIONS);
+         case CACHE_HIT_LOW -> Set.of(StatsFeature.CACHE_COUNTERS);
+         case TEMP_SPILL -> Set.of(StatsFeature.STATEMENT_IO);
+         case DEADLOCKS -> Set.of(StatsFeature.DATABASE_COUNTERS);
+         case N_PLUS_ONE, HOT_JOB -> Set.of();
+      });
+   }
+
 
 
    /*******************************************************************************

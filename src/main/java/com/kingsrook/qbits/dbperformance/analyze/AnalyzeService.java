@@ -25,9 +25,12 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import com.kingsrook.qbits.dbperformance.DbPerfRuntime;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfSettingsService;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
+import com.kingsrook.qbits.dbperformance.provider.DbStatsProviders;
+import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 
 
@@ -70,7 +73,8 @@ public class AnalyzeService
 
 
    /*******************************************************************************
-    ** Disabled rules are neither evaluated nor reconciled.
+    ** Disabled rules, and rules whose evidence the backend's provider cannot
+    ** supply (unknown before the first collection), are neither evaluated nor reconciled.
     *******************************************************************************/
    public List<Result> run(String backend) throws Exception
    {
@@ -79,9 +83,15 @@ public class AnalyzeService
          throw (new IllegalArgumentException("Backend is not configured for this runtime"));
       }
       QRecord settings = new DbPerfSettingsService(runtime).ensure(backend);
+      String provider = settings.getValueString("provider");
+      Set<StatsFeature> available = provider == null ? null : DbStatsProviders.forProviderName(provider).features();
       List<Result> results = new ArrayList<>();
       for(DbPerfRule rule : rules)
       {
+         if(available != null && !available.containsAll(rule.requires()))
+         {
+            continue;
+         }
          try
          {
             QRecord row = runtime.asSystem(() -> DbPerfStore.first("db_perf_rule", DbPerfStore.eq("code", rule.code())));

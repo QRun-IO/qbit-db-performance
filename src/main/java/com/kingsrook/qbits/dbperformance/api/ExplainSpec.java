@@ -50,7 +50,7 @@ public class ExplainSpec extends DbPerformanceJsonSpec
    public BasicOperation defineBasicOperation()
    {
       return (new BasicOperation().withHttpMethod(HttpMethod.POST).withPath("/qbit/db-performance/explain")
-         .withShortSummary("Explain a PostgreSQL query").withLongDescription("PLAN requires db_performance.explain; ANALYZE requires db_performance.explain_analyze. Values and ANALYZE plans are never persisted."));
+         .withShortSummary("Explain a query (PostgreSQL JSON or H2 text plan)").withLongDescription("PLAN requires db_performance.explain; ANALYZE requires db_performance.explain_analyze. Values and ANALYZE plans are never persisted."));
    }
 
 

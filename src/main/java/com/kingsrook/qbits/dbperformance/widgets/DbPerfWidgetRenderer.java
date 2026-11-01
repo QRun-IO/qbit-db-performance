@@ -37,7 +37,10 @@ import com.kingsrook.qbits.dbperformance.api.DbPerformanceData;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
 import com.kingsrook.qbits.dbperformance.collect.SnapshotCollector;
 import com.kingsrook.qbits.dbperformance.provider.ConnectionCount;
+import com.kingsrook.qbits.dbperformance.provider.DbStatsProvider;
 import com.kingsrook.qbits.dbperformance.provider.DbStatsProviders;
+import com.kingsrook.qbits.dbperformance.provider.SetupCheck;
+import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 import com.kingsrook.qqq.backend.core.actions.dashboard.widgets.AbstractWidgetRenderer;
 import com.kingsrook.qqq.backend.core.actions.tables.AggregateAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -131,14 +134,35 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
       boolean attribution = settings == null ? Boolean.TRUE.equals(runtime.getConfig().getAttributionEnabled()) : Boolean.TRUE.equals(settings.getValueBoolean("attributionEnabled"));
       List<Map<String, Object>> rows = new ArrayList<>();
       rows.add(check("Monitored backend", runtime.getConfig().getBackendName(), "Review Settings for this backend."));
-      rows.add(check("Provider", settings == null ? "Not detected yet" : settings.getValueString("provider"), "PostgreSQL 13+ is supported."));
-      rows.add(check("pg_stat_statements", access, "Preload and create pg_stat_statements; then run Collect now."));
-      rows.add(check("pg_read_all_stats", access, settings == null ? "Grant pg_read_all_stats to the application's database role." : settings.getValueString("statsAccessMessage")));
+      rows.add(check("Provider", settings == null ? "Not detected yet" : settings.getValueString("provider"), "PostgreSQL 13+ and H2 2.x are supported."));
+      DbStatsProvider provider = settings == null ? providerForBackend(runtime) : DbStatsProviders.forProviderName(settings.getValueString("provider"));
+      for(SetupCheck check : provider.setupChecks(access, settings == null ? null : settings.getValueString("statsAccessMessage")))
+      {
+         rows.add(check(check.check(), check.state(), check.nextStep()));
+      }
       rows.add(check("Last snapshot", last == null ? "Nothing collected yet" : Duration.between(last, Instant.now()).toSeconds() + " seconds ago",
          last == null ? "Run Collect now from Snapshots, or wait for the next scheduled collection." : "Collection normally runs every " + SnapshotCollector.positive(settings, "snapshotIntervalMinutes", 5) + " minutes."));
       rows.add(check("Attribution", attribution ? "On" : "Off", attribution ? "Attribution starts after the next flush." : "Enable attribution in Settings and the host configuration."));
       rows.add(check("Schedules", runtime.getConfig().getSchedulerName() == null ? "Not configured" : "Configured", "Set schedulerName on the qbit and register that scheduler in the host."));
       return (table("Run Collect now to start collecting database performance.", rows, "Check", "State", "Next step"));
+   }
+
+
+
+   /*******************************************************************************
+    ** Before the first collection the vendor comes from the backend itself;
+    ** an unreachable backend falls back to the unsupported checks.
+    *******************************************************************************/
+   private static DbStatsProvider providerForBackend(DbPerfRuntime runtime)
+   {
+      try(Connection connection = ConnectionManager.getConnection((RDBMSBackendMetaData) runtime.getInstance().getBackend(runtime.getConfig().getBackendName())))
+      {
+         return (DbStatsProviders.forConnection(connection));
+      }
+      catch(Exception e)
+      {
+         return (DbStatsProviders.forProviderName(null));
+      }
    }
 
 
@@ -257,13 +281,29 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
       List<QRecord> snapshots = data.snapshots();
       List<MultiStatisticsData.StatisticsGroupData.Statistic> values = new ArrayList<>();
       values.add(stat("Total connections", latest == null ? null : number(latest, "connectionsTotal")));
-      values.add(stat("Maximum connections", latest == null ? null : number(latest, "maxConnections")));
+      ////////////////////////////////////////////////////////////////////////
+      // figures the provider does not keep (H2: limit, cache, temp,        //
+      // deadlocks) are stored as null and left out rather than shown as 0  //
+      ////////////////////////////////////////////////////////////////////////
+      boolean limit = latest == null || latest.getValue("maxConnections") != null;
+      boolean cache = latest == null || latest.getValue("cacheHitRatio") != null;
+      boolean counters = snapshots.isEmpty() || snapshots.stream().anyMatch(row -> row.getValue("deadlocks") != null || row.getValue("tempBytes") != null);
+      if(limit)
+      {
+         values.add(stat("Maximum connections", latest == null ? null : number(latest, "maxConnections")));
+      }
       values.add(stat("Active", latest == null ? null : number(latest, "connectionsActive")));
       values.add(stat("Idle", latest == null ? null : number(latest, "connectionsIdle")));
       values.add(stat("Idle in transaction", latest == null ? null : number(latest, "connectionsIdleInTx")));
-      values.add(stat("Cache hit %", latest == null ? null : 100 * number(latest, "cacheHitRatio")));
-      values.add(stat("Temp MB (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "tempBytes")).sum() / 1048576));
-      values.add(stat("Deadlocks (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "deadlocks")).sum()));
+      if(cache)
+      {
+         values.add(stat("Cache hit %", latest == null ? null : 100 * number(latest, "cacheHitRatio")));
+      }
+      if(counters)
+      {
+         values.add(stat("Temp MB (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "tempBytes")).sum() / 1048576));
+         values.add(stat("Deadlocks (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "deadlocks")).sum()));
+      }
       return (new MultiStatisticsData(null, List.of(new MultiStatisticsData.StatisticsGroupData().withHeader("Connection capacity")
          .withSubheader(latest == null ? "Capacity appears after the next snapshot." : "Latest snapshot; percentages and MB rounded to whole numbers.").withStatisticList(values))));
    }
@@ -355,16 +395,29 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
     *******************************************************************************/
    public MultiTableData tables(DbPerformanceData data) throws QException
    {
-      List<QRecord> scans = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("seqScanShare", false)).withLimit(100));
+      QRecord settings = data.settings();
+      DbStatsProvider provider = settings == null || settings.getValueString("provider") == null ? null : DbStatsProviders.forProviderName(settings.getValueString("provider"));
       List<QRecord> growing = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("growthBytes7d", false)).withLimit(100));
+      TableData growth = table("Growth appears after table history has accumulated.", growing.stream()
+         .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Size MB", mb(row.getValue("totalBytes")),
+            "Growth MB (7 days)", mb(row.getValue("growthBytes7d")))).toList(),
+         "Table", "Size MB", "Growth MB (7 days)");
+      if(provider != null && !provider.features().contains(StatsFeature.TABLE_ACCESS))
+      {
+         //////////////////////////////////////////////////////////////////
+         // vendors without scan counters (H2) list rows and size instead //
+         //////////////////////////////////////////////////////////////////
+         List<QRecord> largest = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("nLiveTup", false)).withLimit(100));
+         return (new MultiTableData(List.of(table("Tables appear after the next table snapshot (normally hourly).", largest.stream()
+            .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Rows (estimate)", row.getValue("nLiveTup"),
+               "Size MB", mb(row.getValue("totalBytes")))).toList(),
+            "Table", "Rows (estimate)", "Size MB"), growth)));
+      }
+      List<QRecord> scans = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("seqScanShare", false)).withLimit(100));
       return (new MultiTableData(List.of(table("Table scans appear after the next table snapshot (normally hourly).", scans.stream()
             .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Sequential scans", row.getValue("seqScan"),
                "Index scans", row.getValue("idxScan"), "Sequential share %", row.getValue("seqScanShare"))).toList(),
-            "Table", "Sequential scans", "Index scans", "Sequential share %"),
-         table("Growth appears after table history has accumulated.", growing.stream()
-            .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Size MB", mb(row.getValue("totalBytes")),
-               "Growth MB (7 days)", mb(row.getValue("growthBytes7d")))).toList(),
-            "Table", "Size MB", "Growth MB (7 days)"))));
+            "Table", "Sequential scans", "Index scans", "Sequential share %"), growth)));
    }
 
 

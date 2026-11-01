@@ -56,6 +56,41 @@ public final class PlanTextRenderer
 
 
    /*******************************************************************************
+    ** Literal-free form of a vendor text plan for prompts: quoted strings are
+    ** redacted everywhere, numbers outside comments (H2 keeps index names and
+    ** scan counts inside comments).
+    *******************************************************************************/
+   public static String redactText(String text)
+   {
+      if(text == null)
+      {
+         return (null);
+      }
+      StringBuilder result = new StringBuilder();
+      java.util.regex.Matcher comment = java.util.regex.Pattern.compile("/\\*.*?\\*/", java.util.regex.Pattern.DOTALL).matcher(text);
+      int last = 0;
+      while(comment.find())
+      {
+         result.append(redactLiterals(text.substring(last, comment.start()), true)).append(redactLiterals(comment.group(), false));
+         last = comment.end();
+      }
+      return (result.append(redactLiterals(text.substring(last), true)).toString());
+   }
+
+
+
+   /*******************************************************************************
+    ** Quoted strings, and optionally standalone numbers, become ?.
+    *******************************************************************************/
+   private static String redactLiterals(String text, boolean numbers)
+   {
+      String result = text.replaceAll("'(?:[^']|'')*'", "?");
+      return (numbers ? result.replaceAll("(?<![\\w?$.\"])\\d+(?:\\.\\d+)?(?![\\w\"])", "?") : result);
+   }
+
+
+
+   /*******************************************************************************
     ** PostgreSQL emits an array containing the plan and optional execution timing.
     *******************************************************************************/
    public static Plan render(String json) throws Exception

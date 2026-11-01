@@ -151,7 +151,7 @@ public class SnapshotEvaluator
       long blocked = activity.stream().filter(r -> "BLOCKED".equals(r.getValueString("reason")))
          .filter(r -> Math.max(RuleContext.number(r, "querySeconds"), RuleContext.number(r, "xactSeconds")) >= RuleContext.number(settings, "blockedAlertSeconds")).count();
       signal(BLOCKED_CHAIN, backend, null, blocked > 0, "Database blocking chain", blocked + " blocked sessions exceed the duration threshold", snapshot, "db_perf_snapshot");
-      if("OK".equals(status) || "NO_READ_ALL_STATS".equals(settings.getValueString("statsAccess")))
+      if("OK".equals(status) || List.of("NO_READ_ALL_STATS", "NOT_ADMIN").contains(settings.getValueString("statsAccess")))
       {
          spikes(ctx, snapshot);
       }

@@ -76,7 +76,7 @@ class DbPerfHealthTest
       DbPerfHealthChecks checks = checks(f, 0);
       for(String access : List.of("FULL", "NO_READ_ALL_STATS", "NO_PG_STAT_STATEMENTS", "UNSUPPORTED", "UNKNOWN"))
       {
-         DbPerfStore.update("db_perf_settings", List.of(new QRecord().withValue("id", f.settings.getValueInteger("id")).withValue("statsAccess", access)));
+         DbPerfStore.update("db_perf_settings", List.of(new QRecord().withValue("id", f.settings.getValueInteger("id")).withValue("provider", "POSTGRES").withValue("statsAccess", access)));
          var outcome = checks.check("stats_access");
          assertThat(outcome.getDetails().getValues()).containsEntry("statsAccess", access).hasSize(1);
          assertThat(outcome.getStatus()).isEqualTo(switch(access)
@@ -90,6 +90,14 @@ class DbPerfHealthTest
          {
             assertThat(outcome.getMessage()).isEqualTo("grant pg_read_all_stats to sa");
          }
+      }
+      for(String access : List.of("NO_QUERY_STATISTICS", "NOT_ADMIN"))
+      {
+         DbPerfStore.update("db_perf_settings", List.of(new QRecord().withValue("id", f.settings.getValueInteger("id")).withValue("provider", "H2").withValue("statsAccess", access)));
+         var outcome = checks.check("stats_access");
+         assertThat(outcome.getStatus()).isEqualTo(HealthStatus.DEGRADED);
+         assertThat(outcome.getDetails().getValues()).containsEntry("statsAccess", access);
+         assertThat(outcome.getMessage()).doesNotContain("pg_").contains(access.equals("NOT_ADMIN") ? "ADMIN TRUE" : "QUERY_STATISTICS=TRUE");
       }
       for(int total : List.of(79, 80, 94, 95))
       {
