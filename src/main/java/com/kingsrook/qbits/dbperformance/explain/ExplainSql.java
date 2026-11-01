@@ -51,10 +51,21 @@ public final class ExplainSql
 
 
    /*******************************************************************************
-    ** Executable SQL with contiguous PostgreSQL bind slots and unquoted tokens.
+    ** Executable SQL with contiguous PostgreSQL bind slots and unquoted tokens,
+    ** plus the same SQL with JDBC-indexed ?n slots for vendors such as H2.
     *******************************************************************************/
-   public record Parsed(String sql, List<String> tokens, int parameterCount)
+   public record Parsed(String sql, List<String> tokens, int parameterCount, String indexedSql)
    {
+      /*******************************************************************************
+       ** PostgreSQL-only form (no JDBC-indexed variant).
+       *******************************************************************************/
+      public Parsed(String sql, List<String> tokens, int parameterCount)
+      {
+         this(sql, tokens, parameterCount, sql);
+      }
+
+
+
       /*******************************************************************************
        ** Reject writes, SELECT INTO and every locking SELECT, including nested CTEs.
        *******************************************************************************/
@@ -83,6 +94,7 @@ public final class ExplainSql
       StringBuilder result = new StringBuilder();
       List<String> tokens = new ArrayList<>();
       Set<Integer> positions = new HashSet<>();
+      List<int[]> slots = new ArrayList<>();
       int jdbc = 0;
       int i = 0;
       boolean ended = false;
@@ -186,6 +198,10 @@ public final class ExplainSql
                   throw (new QBadRequestException("SQL parameter positions must be between 1 and 65535."));
                }
             }
+            if(i > start + 1)
+            {
+               slots.add(new int[] {result.length(), result.length() + (i - start), Integer.parseInt(sql.substring(start + 1, i))});
+            }
             result.append(sql, start, i);
             continue;
          }
@@ -199,7 +215,9 @@ public final class ExplainSql
             }
             else
             {
-               result.append('$').append(++jdbc);
+               String slot = "$" + (++jdbc);
+               slots.add(new int[] {result.length(), result.length() + slot.length(), jdbc});
+               result.append(slot);
                i++;
             }
             continue;
@@ -223,7 +241,12 @@ public final class ExplainSql
       {
          throw (new QBadRequestException("Use either ? parameters or contiguous $1 through $n parameters."));
       }
-      return (new Parsed(result.toString().trim(), List.copyOf(tokens), Math.max(jdbc, maximum)));
+      StringBuilder indexed = new StringBuilder(result);
+      for(int slot = slots.size() - 1; slot >= 0; slot--)
+      {
+         indexed.replace(slots.get(slot)[0], slots.get(slot)[1], "?" + slots.get(slot)[2]);
+      }
+      return (new Parsed(result.toString().trim(), List.copyOf(tokens), Math.max(jdbc, maximum), indexed.toString().trim()));
    }
 
 

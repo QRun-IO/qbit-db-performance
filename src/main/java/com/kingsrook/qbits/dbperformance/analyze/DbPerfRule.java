@@ -22,6 +22,8 @@ package com.kingsrook.qbits.dbperformance.analyze;
 
 
 import java.util.List;
+import java.util.Set;
+import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 
 
 /*******************************************************************************
@@ -39,4 +41,15 @@ public interface DbPerfRule
     ** Evaluate the configured thresholds against stored observations.
     *******************************************************************************/
    List<FindingDraft> evaluate(RuleContext ctx) throws Exception;
+
+
+
+   /*******************************************************************************
+    ** Statistics areas the evidence comes from. A rule is skipped (neither
+    ** evaluated nor reconciled) when the backend's provider cannot supply them.
+    *******************************************************************************/
+   default Set<StatsFeature> requires()
+   {
+      return (Set.of());
+   }
 }

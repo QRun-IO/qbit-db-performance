@@ -23,12 +23,17 @@ package com.kingsrook.qbits.dbperformance.provider;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 /*******************************************************************************
- ** Read-only database statistics SPI. Implementations never change the database.
+ ** Database statistics SPI. Every read is read-only and never changes the
+ ** database; {@link #enableStatementStatistics} is the one explicit, opt-in
+ ** change, run only from the settings action by a user who manages settings.
+ ** A provider is chosen per JDBC product name by {@link DbStatsProviders}.
  *******************************************************************************/
 public interface DbStatsProvider
 {
@@ -90,4 +95,57 @@ public interface DbStatsProvider
     ** readSettings using the supplied backend connection.
     *******************************************************************************/
    Map<String, String> readSettings(Connection connection) throws SQLException;
+
+
+
+   /*******************************************************************************
+    ** Statistics areas this vendor can supply at best, independent of a
+    ** connection. Analysis rules that need an absent area are skipped.
+    *******************************************************************************/
+   default Set<StatsFeature> features()
+   {
+      return (Set.of());
+   }
+
+
+
+   /*******************************************************************************
+    ** Operator next step for a persisted statsAccess code (health and setup).
+    *******************************************************************************/
+   default String remedy(String statsAccess, String databaseUser)
+   {
+      return ("FULL".equals(statsAccess) ? "Full statistics access" : "Use a supported database vendor and statistics provider");
+   }
+
+
+
+   /*******************************************************************************
+    ** Vendor prerequisite rows for the guided setup panel, from saved settings.
+    *******************************************************************************/
+   default List<SetupCheck> setupChecks(String statsAccess, String message)
+   {
+      return (List.of(new SetupCheck("Statistics access", statsAccess, message == null ? remedy(statsAccess, null) : message)));
+   }
+
+
+
+   /*******************************************************************************
+    ** Turn on statement statistics where the vendor allows it at runtime, and
+    ** return what was done. The default explains why it is not possible.
+    *******************************************************************************/
+   default String enableStatementStatistics(Connection connection) throws SQLException
+   {
+      throw (new SQLFeatureNotSupportedException("Statement statistics cannot be enabled at runtime for this database; see the setup panel."));
+   }
+
+
+
+   /*******************************************************************************
+    ** Vendor text plan for providers without structured JSON plans. The SQL uses
+    ** JDBC ?n slots; parameters are bound only for ANALYZE.
+    *******************************************************************************/
+   default String explainText(Connection connection, String sql, List<String> parameters, boolean analyze, int timeoutMs) throws SQLException
+   {
+      throw (new SQLFeatureNotSupportedException("Query plans are not available for this database."));
+   }
 }

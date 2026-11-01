@@ -24,13 +24,16 @@ package com.kingsrook.qbits.dbperformance.provider;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import static com.kingsrook.qbits.dbperformance.provider.JdbcReads.instant;
+import static com.kingsrook.qbits.dbperformance.provider.JdbcReads.read;
+import static com.kingsrook.qbits.dbperformance.provider.JdbcReads.scalar;
 
 
 /*******************************************************************************
@@ -85,7 +88,60 @@ public class PostgresStatsProvider implements DbStatsProvider
             }
          }
       }
-      return (new ProviderCapabilities(version >= 130000, version, installed, privileged, access, message));
+      EnumSet<StatsFeature> available = EnumSet.copyOf(features());
+      if(!installed)
+      {
+         available.removeAll(EnumSet.of(StatsFeature.STATEMENTS, StatsFeature.STATEMENT_IO, StatsFeature.STATEMENT_RESET));
+      }
+      if(version < 140000)
+      {
+         available.remove(StatsFeature.STATEMENT_RESET);
+      }
+      if(version < 160000)
+      {
+         available.remove(StatsFeature.EXPLAIN_GENERIC);
+      }
+      return (new ProviderCapabilities(version >= 130000, version, installed, privileged, access, message, version >= 130000 ? available : EnumSet.noneOf(StatsFeature.class)));
+   }
+
+
+
+   /*******************************************************************************
+    ** Every area: the cumulative statistics views cover them all.
+    *******************************************************************************/
+   @Override
+   public Set<StatsFeature> features()
+   {
+      return (StatsFeature.of(StatsFeature.values()));
+   }
+
+
+
+   /*******************************************************************************
+    ** Role and extension prerequisites for each access code.
+    *******************************************************************************/
+   @Override
+   public String remedy(String statsAccess, String databaseUser)
+   {
+      return (switch(statsAccess == null ? "" : statsAccess)
+      {
+         case "FULL" -> "Full statistics access";
+         case "NO_READ_ALL_STATS" -> "grant pg_read_all_stats to " + databaseUser;
+         case "NO_PG_STAT_STATEMENTS" -> "Enable pg_stat_statements in shared_preload_libraries and create the extension";
+         default -> "Use a supported PostgreSQL version (13 or newer) and statistics provider";
+      });
+   }
+
+
+
+   /*******************************************************************************
+    ** Guided setup rows: the extension and the statistics role.
+    *******************************************************************************/
+   @Override
+   public List<SetupCheck> setupChecks(String statsAccess, String message)
+   {
+      return (List.of(new SetupCheck("pg_stat_statements", statsAccess, "Preload and create pg_stat_statements; then run Collect now."),
+         new SetupCheck("pg_read_all_stats", statsAccess, message == null ? "Grant pg_read_all_stats to the application's database role." : message)));
    }
 
 
@@ -238,25 +294,6 @@ public class PostgresStatsProvider implements DbStatsProvider
 
 
    /*******************************************************************************
-    ** A single numeric read.
-    *******************************************************************************/
-   private long scalar(Connection connection, String sql) throws SQLException
-   {
-      return (read(connection, sql, row -> row.getLong(1)).getFirst());
-   }
-
-
-   /*******************************************************************************
-    ** Timestamp conversion preserves null reset/maintenance values.
-    *******************************************************************************/
-   private static Instant instant(ResultSet row, String column) throws SQLException
-   {
-      Timestamp timestamp = row.getTimestamp(column);
-      return (timestamp == null ? null : timestamp.toInstant());
-   }
-
-
-   /*******************************************************************************
     ** Copy cumulative counters to the entity's camelCase names.
     *******************************************************************************/
    private static Map<String, Long> counters(ResultSet row, String... columns) throws SQLException
@@ -281,38 +318,5 @@ public class PostgresStatsProvider implements DbStatsProvider
          value.append(value.isEmpty() ? part : Character.toUpperCase(part.charAt(0)) + part.substring(1));
       }
       return (value.toString());
-   }
-
-
-   /*******************************************************************************
-    ** Execute one bounded-time read and close JDBC resources.
-    *******************************************************************************/
-   private static <T> List<T> read(Connection connection, String sql, RowReader<T> mapper) throws SQLException
-   {
-      List<T> result = new ArrayList<>();
-      try(Statement statement = connection.createStatement())
-      {
-         statement.setQueryTimeout(30);
-         try(ResultSet rows = statement.executeQuery(sql))
-         {
-            while(rows.next())
-            {
-               result.add(mapper.read(rows));
-            }
-         }
-      }
-      return (result);
-   }
-
-
-   /*******************************************************************************
-    ** Checked JDBC row mapping.
-    *******************************************************************************/
-   private interface RowReader<T>
-   {
-      /*******************************************************************************
-       ** Map one row.
-       *******************************************************************************/
-      T read(ResultSet row) throws SQLException;
    }
 }

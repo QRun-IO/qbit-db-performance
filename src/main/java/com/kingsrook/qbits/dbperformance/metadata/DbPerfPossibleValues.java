@@ -43,7 +43,7 @@ public final class DbPerfPossibleValues
     *******************************************************************************/
    public enum Provider implements PossibleValueEnum<String>
    {
-      POSTGRES, MYSQL, UNSUPPORTED;
+      POSTGRES, H2, MYSQL, UNSUPPORTED;
 
 
       /*******************************************************************************
@@ -73,7 +73,7 @@ public final class DbPerfPossibleValues
     *******************************************************************************/
    public enum StatsAccess implements PossibleValueEnum<String>
    {
-      FULL, NO_READ_ALL_STATS, NO_PG_STAT_STATEMENTS, UNSUPPORTED;
+      FULL, NO_READ_ALL_STATS, NO_PG_STAT_STATEMENTS, NO_QUERY_STATISTICS, NOT_ADMIN, UNSUPPORTED;
 
 
       /*******************************************************************************

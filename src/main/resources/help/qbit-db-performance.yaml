@@ -519,7 +519,7 @@ entries:
 - key: table:db_perf_settings;field:lastTableSnapshotAt
   summary: "Time of the latest table and index collection pass."
 - key: table:db_perf_settings;field:statsAccess
-  summary: "Statistics capability: FULL, reduced access, missing extension, or unsupported provider."
+  summary: "Statistics capability: FULL, reduced visibility, statement statistics off, or unsupported provider."
 - key: table:db_perf_settings;field:statsAccessMessage
   summary: "The collector explains missing capabilities and the next grant or setup step."
 - key: table:db_perf_snapshot;slot:help
@@ -810,6 +810,10 @@ entries:
   summary: "Collect an immediate snapshot and force table and index statistics."
   content: |
     Run from the Snapshots table. Requires manage settings. The Result screen reports success, partial access or collection failure. The first pass establishes counter baselines.
+- key: process:dbPerfEnableStatementStatistics;slot:help
+  summary: "Turn on statement statistics where the database allows it at runtime."
+  content: |
+    Run from Settings. Requires manage settings. On H2 it runs SET QUERY_STATISTICS TRUE, which needs an H2 admin user and lasts until the database closes; add ;QUERY_STATISTICS=TRUE to the JDBC URL to keep it on. PostgreSQL cannot do this at runtime (pg_stat_statements needs shared_preload_libraries and CREATE EXTENSION), so the result explains the manual step. The Result screen shows the new statistics access.
 - key: process:dbPerfRollupAndPurge;slot:help
   summary: "Roll up completed days and remove expired details."
   content: |
@@ -817,7 +821,7 @@ entries:
 - key: process:dbPerfQueryPlan;slot:help
   summary: "Inspect the plan of one statement, with optional read-only execution."
   content: |
-    Choose PLAN (default) or ANALYZE. PLAN uses a generic plan for parameterized SQL on PostgreSQL 16+. ANALYZE requires explain analyze permission and exactly one SELECT with no modifying CTEs, INTO or row locks. Enter parameter values only for ANALYZE, one per line in placeholder order. Values are sent transiently; they and the ANALYZE plan are never stored. Every request is audited. Results include copyable plan text, cost, a SQL Workbench link and a literal-free assistant prompt. No model is called by this qbit.
+    Choose PLAN (default) or ANALYZE. PLAN uses a generic plan for parameterized SQL on PostgreSQL 16+ and H2. H2 plans are text (index choice and scan counts) without a cost tree. ANALYZE requires explain analyze permission and exactly one SELECT with no modifying CTEs, INTO or row locks. Enter parameter values only for ANALYZE, one per line in placeholder order. Values are sent transiently; they and the ANALYZE plan are never stored. Every request is audited. Results include copyable plan text, cost, a SQL Workbench link and a literal-free assistant prompt. No model is called by this qbit.
 - key: widget:dbPerfSetup;slot:label
   summary: "Check backend, statistics access, collection, attribution and scheduler setup."
 - key: widget:dbPerfDatabaseTime;slot:label

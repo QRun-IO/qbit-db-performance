@@ -33,6 +33,7 @@ import com.kingsrook.qbits.dbperformance.api.OverviewSpec;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfSettingsService;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
 import com.kingsrook.qbits.dbperformance.explain.ExplainRequest;
+import com.kingsrook.qbits.dbperformance.explain.ExplainResult;
 import com.kingsrook.qbits.dbperformance.explain.ExplainService;
 import com.kingsrook.qbits.dbperformance.explain.QueryPlanProcess;
 import com.kingsrook.qbits.dbperformance.normalize.SqlNormalizer;
@@ -103,7 +104,7 @@ class DbPerfPresentationTest
       assertThat(new DbPerfWidgetRenderer().liveActivity(data).getNoRowsFoundHTML()).isEqualTo("No long-running or blocked sessions right now");
       assertThat(new DbPerfWidgetRenderer().attribution().getTableDataList().getFirst().getNoRowsFoundHTML()).isEqualTo("Attribution starts after the next flush");
       assertThat(new DbPerfWidgetRenderer().connectionStatistics(data).getType()).isEqualTo("multiStatistics");
-      assertThat(new DbPerfWidgetRenderer().connectionsByApplication(runtime).getRows()).isEmpty();
+      assertThat(new DbPerfWidgetRenderer().connectionsByApplication(runtime).getRows()).isNotEmpty().allSatisfy(row -> assertThat(row).containsKeys("Application", "User", "State", "Connections"));
       QContext.setQSession(new QSession());
       for(String name : DbPerfWidgets.HOME)
       {
@@ -235,7 +236,9 @@ class DbPerfPresentationTest
    void explainAuditAndHandler() throws Exception
    {
       ExplainService service = new ExplainService(runtime);
-      assertThatThrownBy(() -> service.explain(new ExplainRequest(runtime.getConfig().getBackendName(), null, "select current_date", ExplainRequest.Mode.PLAN, List.of()))).hasMessageContaining("PostgreSQL");
+      ExplainResult h2 = service.explain(new ExplainRequest(runtime.getConfig().getBackendName(), null, "select current_date", ExplainRequest.Mode.PLAN, List.of()));
+      assertThat(h2.planJson()).isNull();
+      assertThat(h2.planText()).containsIgnoringCase("CURRENT_DATE");
       assertThatThrownBy(() -> service.explain(null)).hasMessageContaining("Choose PLAN");
       assertThatThrownBy(() -> service.explain(new ExplainRequest(runtime.getConfig().getBackendName(), null, null, ExplainRequest.Mode.PLAN, List.of()))).hasMessageContaining("either");
       QContext.setQSession(new QSession());

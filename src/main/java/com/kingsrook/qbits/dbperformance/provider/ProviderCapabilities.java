@@ -21,11 +21,44 @@
 package com.kingsrook.qbits.dbperformance.provider;
 
 
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
 
 
 /*******************************************************************************
- ** ProviderCapabilities read from database statistics; no persistence or side effects.
+ ** What one provider can read on one connection; no persistence or side effects.
+ ** {@code statsAccess} is a stable code persisted on settings (FULL, or the most
+ ** important missing prerequisite); {@code message} is the provider's own
+ ** next step; {@code features} lists the statistics areas available right now.
  *******************************************************************************/
-public record ProviderCapabilities(boolean supported, int version, boolean statements, boolean readAllStats, String statsAccess, String message)
+public record ProviderCapabilities(boolean supported, int version, boolean statements, boolean readAllStats, String statsAccess, String message, Set<StatsFeature> features)
 {
+   /*******************************************************************************
+    ** Defensive copy.
+    *******************************************************************************/
+   public ProviderCapabilities
+   {
+      features = features == null || features.isEmpty() ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(features));
+   }
+
+
+
+   /*******************************************************************************
+    ** Pre-feature form: a supported provider is assumed to offer every area.
+    *******************************************************************************/
+   public ProviderCapabilities(boolean supported, int version, boolean statements, boolean readAllStats, String statsAccess, String message)
+   {
+      this(supported, version, statements, readAllStats, statsAccess, message, supported ? EnumSet.allOf(StatsFeature.class) : Set.of());
+   }
+
+
+
+   /*******************************************************************************
+    ** Whether an area is available on this connection.
+    *******************************************************************************/
+   public boolean has(StatsFeature feature)
+   {
+      return (features.contains(feature));
+   }
 }

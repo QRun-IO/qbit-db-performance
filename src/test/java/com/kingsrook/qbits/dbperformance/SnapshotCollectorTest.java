@@ -28,6 +28,7 @@ import java.util.List;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfSettingsService;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
 import com.kingsrook.qbits.dbperformance.collect.SnapshotCollector;
+import com.kingsrook.qbits.dbperformance.provider.UnsupportedStatsProvider;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
@@ -161,9 +162,17 @@ class SnapshotCollectorTest
    void unsupportedVendor() throws Exception
    {
       DbPerfRuntime runtime = DbPerfRuntime.of(DbPerfTestSupport.instance());
-      QRecord snapshot = new SnapshotCollector(runtime).collect(runtime.getConfig().getBackendName(), false);
+      QRecord snapshot = new SnapshotCollector(runtime, Clock.systemUTC(), new UnsupportedStatsProvider()).collect(runtime.getConfig().getBackendName(), false);
       assertThat(snapshot.getValueString("status")).isEqualTo("PARTIAL");
       assertThat(snapshot.getValueString("errorMessage")).contains("not supported");
+
+      //////////////////////////////////////////////////////////////////////
+      // the H2 test backend itself is supported, partially without      //
+      // QUERY_STATISTICS                                                 //
+      //////////////////////////////////////////////////////////////////////
+      QRecord h2 = new SnapshotCollector(runtime).collect(runtime.getConfig().getBackendName(), false);
+      assertThat(h2.getValueString("status")).isEqualTo("PARTIAL");
+      assertThat(h2.getValueString("errorMessage")).contains("QUERY_STATISTICS");
    }
 
 

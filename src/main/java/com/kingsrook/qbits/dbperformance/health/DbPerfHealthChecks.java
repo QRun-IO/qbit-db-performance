@@ -27,6 +27,7 @@ import java.util.List;
 import com.kingsrook.qbits.dbperformance.DbPerfRuntime;
 import com.kingsrook.qbits.dbperformance.analyze.RuleContext;
 import com.kingsrook.qbits.dbperformance.collect.DbPerfStore;
+import com.kingsrook.qbits.dbperformance.provider.DbStatsProviders;
 import com.kingsrook.qqq.backend.core.health.HealthCategory;
 import com.kingsrook.qqq.backend.core.health.HealthCheckKind;
 import com.kingsrook.qqq.backend.core.health.HealthCheckMetaData;
@@ -111,15 +112,15 @@ public class DbPerfHealthChecks
             return (HealthCheckOutcome.unknown("No statistics access observation yet"));
          }
          String user = ((RDBMSBackendMetaData) runtime.getInstance().getBackend(backend)).getUsername();
+         String remedy = DbStatsProviders.forProviderName(settings.getValueString("provider")).remedy(access, user);
          HealthCheckOutcome outcome = switch(access)
          {
             case "FULL" -> HealthCheckOutcome.up("Full statistics access");
-            case "NO_READ_ALL_STATS" -> HealthCheckOutcome.degraded("grant pg_read_all_stats to " + user);
-            case "NO_PG_STAT_STATEMENTS" -> HealthCheckOutcome.down("Enable pg_stat_statements in shared_preload_libraries and create the extension");
-            case "UNSUPPORTED" -> HealthCheckOutcome.down("Use a supported PostgreSQL version (13 or newer) and statistics provider");
+            case "NO_READ_ALL_STATS", "NOT_ADMIN", "NO_QUERY_STATISTICS" -> HealthCheckOutcome.degraded(remedy);
+            case "NO_PG_STAT_STATEMENTS", "UNSUPPORTED" -> HealthCheckOutcome.down(remedy);
             default -> HealthCheckOutcome.unknown("Statistics access has not been classified");
          };
-         String safe = List.of("FULL", "NO_READ_ALL_STATS", "NO_PG_STAT_STATEMENTS", "UNSUPPORTED").contains(access) ? access : "UNKNOWN";
+         String safe = List.of("FULL", "NO_READ_ALL_STATS", "NO_PG_STAT_STATEMENTS", "NO_QUERY_STATISTICS", "NOT_ADMIN", "UNSUPPORTED").contains(access) ? access : "UNKNOWN";
          return (outcome.withDetails(new HealthDetails().withValue("statsAccess", safe)));
       }
       var filter = DbPerfStore.eq("backendName", backend).withOrderBy(new QFilterOrderBy("capturedAt", false));

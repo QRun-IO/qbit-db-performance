@@ -47,7 +47,7 @@ public class UnsupportedStatsProvider implements DbStatsProvider
    @Override
    public ProviderCapabilities capabilities(Connection connection)
    {
-      return (new ProviderCapabilities(false, 0, false, false, "UNSUPPORTED", "This database vendor is not supported; PostgreSQL 13 or newer is required."));
+      return (new ProviderCapabilities(false, 0, false, false, "UNSUPPORTED", "This database vendor is not supported; PostgreSQL 13+ and H2 2.x are (see docs/PROVIDERS.md)."));
    }
 
 

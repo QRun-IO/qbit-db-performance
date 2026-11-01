@@ -54,6 +54,7 @@ public final class DbPerfProcesses
    public static final String COLLECT = "dbPerfCollectSnapshot";
    public static final String ROLLUP = "dbPerfRollupAndPurge";
    public static final String COLLECT_NOW = "dbPerfCollectNow";
+   public static final String ENABLE_STATISTICS = "dbPerfEnableStatementStatistics";
 
 
    /*******************************************************************************
@@ -98,6 +99,10 @@ public final class DbPerfProcesses
       instance.addProcess(scheduled(config, ROLLUP, "Roll up and purge database performance", DbPerfRollupStep.class, config.getRollupCron()));
       instance.addProcess(base(config, COLLECT_NOW, "Collect now", DbPerfCollectStep.class, true)
          .withTableName("db_perf_snapshot")
+         .withStep(new QFrontendStepMetaData().withName("result").withLabel("Result")
+            .withComponent(new QFrontendComponentMetaData().withType(QComponentType.PROCESS_SUMMARY_RESULTS))));
+      instance.addProcess(base(config, ENABLE_STATISTICS, "Enable statement statistics", DbPerfEnableStatisticsStep.class, false)
+         .withTableName("db_perf_settings")
          .withStep(new QFrontendStepMetaData().withName("result").withLabel("Result")
             .withComponent(new QFrontendComponentMetaData().withType(QComponentType.PROCESS_SUMMARY_RESULTS))));
    }
