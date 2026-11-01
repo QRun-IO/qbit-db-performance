@@ -19,7 +19,7 @@ S = supported, A = approximated, - = not available from the vendor.
 | Cache hit ratio | S | - | `info.CACHE_HIT_RATIO` exists but is not a cumulative hit/read pair; shown in settings only |
 | Database size | S | S | `SETTINGS` `info.FILE_SIZE` (0 for in-memory databases) |
 | Connection limit | S | - | H2 has no connection limit |
-| Statement statistics | S | S | `QUERY_STATISTICS` with `QUERY_STATISTICS=TRUE`: calls, total/mean/max ms, rows. No query id or user: the id is a stable SHA-256 hash of the text and the user is empty. The collector's own `INFORMATION_SCHEMA` reads and connection setup (`SET ...`, which H2 replays for every JDBC URL setting on each new connection, and `CALL DATABASE()`) are excluded. H2 keeps `QUERY_STATISTICS_MAX_ENTRIES` statements (default 100, set 1000) and evicts the oldest third past the cap |
+| Statement statistics | S | S | `QUERY_STATISTICS` with `QUERY_STATISTICS=TRUE`: calls, total/mean/max ms, rows. No query id or user: the id is a stable SHA-256 hash of the text and the user is empty. The collector's own `INFORMATION_SCHEMA` and `DISK_SPACE_USED` reads and connection setup (`SET ...`, which H2 replays for every JDBC URL setting on each new connection, and `CALL DATABASE()`) are excluded. H2 keeps `QUERY_STATISTICS_MAX_ENTRIES` statements (default 100, set 1000) and evicts the oldest third past the cap |
 | Statement I/O (blocks, temp) | S | - | |
 | Statement reset time | S (14+) | - | A restart or eviction shows as falling call counts, which the delta logic treats as a reset |
 | Table row estimates | S | A | `TABLES.ROW_COUNT_ESTIMATE` |

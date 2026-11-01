@@ -107,6 +107,7 @@ class H2StatsProviderTest
          assertThat(provider.readDatabase(connection).maxConnections()).isZero();
          assertThat(provider.readStatementResetInfo(connection).statsReset()).isNull();
 
+         provider.readTables(connection);
          List<StatementStats> statements = provider.readStatements(connection);
          StatementStats lookup = statements.stream().filter(s -> s.queryText().contains("WHERE customer_id = 3")).findFirst().orElseThrow();
          assertThat(lookup.calls()).isEqualTo(5);
@@ -114,7 +115,7 @@ class H2StatsProviderTest
          assertThat(lookup.totalExecMs()).isGreaterThanOrEqualTo(lookup.maxExecMs());
          assertThat(lookup.dbUser()).isNull();
          assertThat(statements).noneMatch(s -> s.queryText().toUpperCase().contains("INFORMATION_SCHEMA") || s.queryText().contains("DB_PERF_PROBE")
-            || s.queryText().toUpperCase().startsWith("SET ") || s.queryText().equalsIgnoreCase("CALL DATABASE()"));
+            || s.queryText().toUpperCase().startsWith("SET ") || s.queryText().contains("DISK_SPACE_USED") || s.queryText().equalsIgnoreCase("CALL DATABASE()"));
          assertThat(provider.readStatements(connection)).anyMatch(s -> s.queryId() == lookup.queryId() && s.queryText().equals(lookup.queryText()));
 
          TableStats orders = provider.readTables(connection).stream().filter(t -> t.tableName().equalsIgnoreCase("orders")).findFirst().orElseThrow();

@@ -81,6 +81,7 @@ public class H2StatsProvider implements DbStatsProvider
    // it and INFORMATION_SCHEMA reads (the collector's own) are not stored  //
    ///////////////////////////////////////////////////////////////////////////
    private static final String PROBE = "SELECT 1 AS DB_PERF_PROBE";
+   private static final String DISK_SPACE = "SELECT DISK_SPACE_USED(?)";
 
    private static final Set<StatsFeature> FEATURES = StatsFeature.of(StatsFeature.DATABASE_SIZE, StatsFeature.STATEMENTS,
       StatsFeature.TABLE_ROWS, StatsFeature.TABLE_SIZES, StatsFeature.INDEX_DEFINITIONS, StatsFeature.SESSIONS, StatsFeature.BLOCKING,
@@ -194,15 +195,15 @@ public class H2StatsProvider implements DbStatsProvider
 
 
    /*******************************************************************************
-    ** Not application statements: the collector's own probe and INFORMATION_SCHEMA
-    ** reads, and connection setup. H2 replays every JDBC URL setting as a SET on
+    ** Not application statements: the collector's own probe, table sizing and
+    ** INFORMATION_SCHEMA reads, and connection setup. H2 replays every JDBC URL setting as a SET on
     ** each new connection and drivers call DATABASE() for the catalog, so with
     ** unpooled connections these dominate the call counts without being work.
     *******************************************************************************/
    static boolean excluded(String sql)
    {
       String upper = sql.strip().toUpperCase(Locale.ROOT);
-      return (PROBE.equals(sql) || upper.contains("INFORMATION_SCHEMA.") || upper.startsWith("SET ") || upper.equals("CALL DATABASE()"));
+      return (PROBE.equals(sql) || DISK_SPACE.equals(sql) || upper.contains("INFORMATION_SCHEMA.") || upper.startsWith("SET ") || upper.equals("CALL DATABASE()"));
    }
 
 
@@ -228,7 +229,7 @@ public class H2StatsProvider implements DbStatsProvider
       List<TableStats> result = new ArrayList<>();
       List<String[]> tables = read(connection, "SELECT TABLE_SCHEMA, TABLE_NAME, ROW_COUNT_ESTIMATE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA <> 'INFORMATION_SCHEMA' ORDER BY TABLE_SCHEMA, TABLE_NAME",
          row -> new String[] {row.getString(1), row.getString(2), row.getString(3)});
-      try(PreparedStatement size = connection.prepareStatement("SELECT DISK_SPACE_USED(?)"))
+      try(PreparedStatement size = connection.prepareStatement(DISK_SPACE))
       {
          size.setQueryTimeout(30);
          for(String[] table : tables)
