@@ -98,6 +98,8 @@ class H2CollectionTest
       assertThat(DbPerfStore.query("db_perf_table_stat", DbPerfStore.eq("backendName", backend))).allSatisfy(row -> assertThat(row.getValue("seqScanShare")).isNull());
       assertThat(new DbPerfWidgetRenderer().tables(new DbPerformanceData(runtime)).getTableDataList().getFirst().getColumns()).extracting(c -> c.getHeader())
          .containsExactly("Table", "Rows (estimate)", "Size MB");
+      assertThat(new DbPerfWidgetRenderer().connectionStatistics(new DbPerformanceData(runtime)).getStatisticsGroupData().getFirst().getStatisticList())
+         .extracting(statistic -> statistic.getLabel()).contains("Total connections", "Idle in transaction").doesNotContain("Maximum connections", "Cache hit %", "Deadlocks (24h)");
       assertThat(new DbPerfWidgetRenderer().setup(runtime, new DbPerformanceData(runtime)).getRows()).extracting(row -> row.get("Check"))
          .contains("H2 QUERY_STATISTICS", "H2 admin user").doesNotContain("pg_read_all_stats");
 

@@ -281,13 +281,29 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
       List<QRecord> snapshots = data.snapshots();
       List<MultiStatisticsData.StatisticsGroupData.Statistic> values = new ArrayList<>();
       values.add(stat("Total connections", latest == null ? null : number(latest, "connectionsTotal")));
-      values.add(stat("Maximum connections", latest == null ? null : number(latest, "maxConnections")));
+      ////////////////////////////////////////////////////////////////////////
+      // figures the provider does not keep (H2: limit, cache, temp,        //
+      // deadlocks) are stored as null and left out rather than shown as 0  //
+      ////////////////////////////////////////////////////////////////////////
+      boolean limit = latest == null || latest.getValue("maxConnections") != null;
+      boolean cache = latest == null || latest.getValue("cacheHitRatio") != null;
+      boolean counters = snapshots.isEmpty() || snapshots.stream().anyMatch(row -> row.getValue("deadlocks") != null || row.getValue("tempBytes") != null);
+      if(limit)
+      {
+         values.add(stat("Maximum connections", latest == null ? null : number(latest, "maxConnections")));
+      }
       values.add(stat("Active", latest == null ? null : number(latest, "connectionsActive")));
       values.add(stat("Idle", latest == null ? null : number(latest, "connectionsIdle")));
       values.add(stat("Idle in transaction", latest == null ? null : number(latest, "connectionsIdleInTx")));
-      values.add(stat("Cache hit %", latest == null ? null : 100 * number(latest, "cacheHitRatio")));
-      values.add(stat("Temp MB (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "tempBytes")).sum() / 1048576));
-      values.add(stat("Deadlocks (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "deadlocks")).sum()));
+      if(cache)
+      {
+         values.add(stat("Cache hit %", latest == null ? null : 100 * number(latest, "cacheHitRatio")));
+      }
+      if(counters)
+      {
+         values.add(stat("Temp MB (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "tempBytes")).sum() / 1048576));
+         values.add(stat("Deadlocks (24h)", snapshots.isEmpty() ? null : snapshots.stream().mapToDouble(row -> number(row, "deadlocks")).sum()));
+      }
       return (new MultiStatisticsData(null, List.of(new MultiStatisticsData.StatisticsGroupData().withHeader("Connection capacity")
          .withSubheader(latest == null ? "Capacity appears after the next snapshot." : "Latest snapshot; percentages and MB rounded to whole numbers.").withStatisticList(values))));
    }
