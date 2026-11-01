@@ -1,6 +1,6 @@
 # QBit DB Performance
 
-Database performance for QQQ apps: PostgreSQL statement deltas, table and index statistics, live sessions and blocking, connection capacity, audited query plans, and typed home dashboards in standard secured QQQ tables. Approved design: [docs/SPEC.md](docs/SPEC.md). This branch implements collection and the presentation/plan-viewer phase; attribution listeners, findings evaluation, alerts and health are developed in a separate phase. No release has been published yet.
+Database performance for QQQ apps: PostgreSQL and H2 statement deltas, table and index statistics, live sessions and blocking, connection capacity, audited query plans, and typed home dashboards in standard secured QQQ tables. Approved design: [docs/SPEC.md](docs/SPEC.md). This branch implements collection and the presentation/plan-viewer phase; attribution listeners, findings evaluation, alerts and health are developed in a separate phase. No release has been published yet.
 
 ## Requirements
 
@@ -8,6 +8,7 @@ Database performance for QQQ apps: PostgreSQL statement deltas, table and index 
 - PostgreSQL **13+**; **16+** for parameterized generic plans, with the pgJDBC driver (built against 42.7.14).
 - `pg_stat_statements` preloaded, created in the monitored database, and readable by the application role.
 - `pg_read_all_stats` granted to that role for complete statistics and other sessions' visibility.
+- Or H2 **2.x** (embedded or server), with `QUERY_STATISTICS=TRUE` for statement statistics (see [H2](#h2)).
 - A host scheduler for automatic collection and rollups. Docker is required for the PostgreSQL acceptance tests.
 
 ## Install
@@ -47,6 +48,16 @@ GRANT pg_read_all_stats TO your_application_role;
 
 Configure `shared_preload_libraries` with `pg_stat_statements` and create the extension in the monitored database through your normal deployment process. Missing access produces reduced-capability status and setup guidance.
 
+### H2
+
+The same qbit runs on an H2 backend; the provider is chosen from the JDBC product name, so no configuration is needed. Add query statistics to the H2 JDBC URL (or run **Enable statement statistics** on Settings as an H2 admin user; H2 forgets it when the database closes):
+
+```
+jdbc:h2:file:/data/app;MODE=MySQL;DB_CLOSE_DELAY=-1;QUERY_STATISTICS=TRUE;QUERY_STATISTICS_MAX_ENTRIES=1000
+```
+
+The cap matters: H2 keeps 100 statements by default and evicts a third of them, oldest first, whenever it is passed. Use an admin user (the default `sa` is one) to see other sessions and blocking. H2 keeps no transaction, cache-hit, scan, vacuum or index-usage counters, so those dashboard figures stay empty and the rules that need them (missing/unused index, bloat, vacuum, cache hit, temp spill, deadlocks, pool sizing) are skipped rather than reporting zeros. Plans are H2 text (index choice and scan counts), not a cost tree. [docs/PROVIDERS.md](docs/PROVIDERS.md) has the full capability table and what other vendors would need.
+
 With `schedulerName`, `dbPerfCollectSnapshot` runs every five minutes and `dbPerfRollupAndPurge` daily at 03:15 (UTC by default). Omitting it registers no schedules. Use **Collect now** on Snapshots for the first baseline and a second collection for deltas. Table and index statistics normally update hourly. The scheduled processes are durable-eligible when the host has durable jobs enabled.
 
 UI hosts must include `qqq-middleware-javalin` (an optional dependency of this qbit). The producer registers UI API extension `db-performance` version `1.0.0` under `/qqq/v1/qbit/db-performance`. Core-only hosts can use tables and collection without middleware.
@@ -80,7 +91,7 @@ Snapshot totals include all observed statement deltas. Only the top configured d
 | `db_performance.view_live_text` | Raw SQL in the transient activity API only; also requires view |
 | `db_performance.explain` | PLAN/GENERIC requests and Query plan record action |
 | `db_performance.explain_analyze` | Execute the guarded ANALYZE service; the record action also needs explain |
-| `db_performance.manage_settings` | Settings/rule edits and Collect now |
+| `db_performance.manage_settings` | Settings/rule edits, Collect now and Enable statement statistics |
 | `db_performance.manage_findings` | Finding status actions supplied by the findings phase |
 
 Hosts can change `permissionBaseName`; grant the corresponding complete names. Persistent collector and explain-audit writes run as the system user, retaining the requesting session's user ID for plans. Dashboard and API reads retain the viewer's session.
@@ -115,6 +126,8 @@ Paths above are relative to `/qqq/v1/qbit/db-performance`. The [committed OpenAP
 ## Security and PHI
 
 Stored SQL is normalized and fingerprinted. Raw `pg_stat_activity` text is never persisted and appears only in the activity API with `view_live_text`; home widgets always use normalized text. SQL literals and parameter values must not be used as identifiers: normalization preserves quoted identifiers. Settings and rules are excluded from AI exposure.
+
+On H2, PLAN runs `EXPLAIN` (not executed; `?n` slots stay unbound for generic plans) and ANALYZE runs `EXPLAIN ANALYZE` with the values bound, both in a transaction that always rolls back. H2 has no READ ONLY transaction mode, so the SELECT-only guard and the rollback are the write boundary there; a function with side effects outside the transaction is not prevented.
 
 PLAN executes EXPLAIN in a read-only transaction with a local timeout and rollback. Parameterized PLAN uses PostgreSQL 16+ GENERIC_PLAN. Only eligible literal-free PLAN/GENERIC plans are stored. A user's SQL must equal its own normalized form to qualify; SQL loaded from the normalized statement table also qualifies.
 

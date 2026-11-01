@@ -4,6 +4,16 @@ All notable changes are documented here. This project follows Keep a Changelog a
 
 ## [Unreleased]
 
+### Added
+- H2 2.x support (`H2StatsProvider`) from `INFORMATION_SCHEMA`: statement statistics from `QUERY_STATISTICS` (when the database runs with `QUERY_STATISTICS=TRUE`), sessions with blocking and idle-in-transaction detection, connection counts, table row estimates and sizes, index definitions, settings, and text query plans (`EXPLAIN` / `EXPLAIN ANALYZE`). The enterprise test server showed UNSUPPORTED on H2; it now collects.
+- Per-area capabilities (`StatsFeature`): providers declare which statistics areas they can supply and `ProviderCapabilities.features()` reports what is available on a connection. Snapshot cache-hit ratio and connection limit stay empty when the vendor has none, and analysis rules declare the areas they need (`DbPerfRule.requires()`) and are skipped on providers that cannot supply them, so H2 never gets "unused index" or "low cache hit" findings from missing counters.
+- Provider registry keyed by JDBC product name (`DbStatsProviders.register`), with `docs/PROVIDERS.md` describing what MySQL/MariaDB and SQLite would map to.
+- **Enable statement statistics** action on Settings (`dbPerfEnableStatementStatistics`, manage settings): on H2 runs `SET QUERY_STATISTICS_MAX_ENTRIES 1000` and `SET QUERY_STATISTICS TRUE` as an admin; on PostgreSQL explains the manual extension setup. It is the qbit's only change to the monitored database and is explicit.
+
+### Changed
+- Health and the Setup panel take their prerequisite checks and remedies from the backend's provider: PostgreSQL still names `pg_stat_statements` and `pg_read_all_stats`; H2 names `QUERY_STATISTICS` and the admin role (new access codes `NO_QUERY_STATISTICS` and `NOT_ADMIN`).
+- The previous-snapshot baseline no longer depends on a PostgreSQL-only counter (it uses the database size every supported provider records).
+
 ### Fixed
 - Query-spike alerts no longer hold seven days of query snapshots as records on every snapshot evaluation (~230,000 rows at kof22's rate). `SnapshotEvaluator` reads the window in 1,000-row keyset pages and keeps only each statement's current interval time, latest capture time and earlier interval times as primitive doubles; the spike rule (twelve prior samples, median, absence after an hour) is unchanged.
 - The Attribution home panel no longer loads a day of attribution detail into the heap. It sums statements and time per unit and table in the database (at most 5,000 groups), so a render holds about a thousand aggregate rows instead of the roughly 570,000 detail rows (540 MB in PostgreSQL) that ran the kof22 web pod out of memory on 2026-10-16. The daily attribution rollup reads the day in 1,000-row keyset pages (`DbPerfStore.forEachPage`), so worker memory is bounded by distinct dimension keys, not by the day's row count. The hourly analysis (`dbPerfAnalyze`) reads attribution the same way: `RuleContext.window("attribution", ...)` returns database sums per unit, table and operation instead of every detail row (it filled the kof22 worker heap to ~1.8 GB every hour).
