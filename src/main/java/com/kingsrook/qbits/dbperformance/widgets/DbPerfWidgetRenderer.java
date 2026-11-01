@@ -40,6 +40,7 @@ import com.kingsrook.qbits.dbperformance.provider.ConnectionCount;
 import com.kingsrook.qbits.dbperformance.provider.DbStatsProvider;
 import com.kingsrook.qbits.dbperformance.provider.DbStatsProviders;
 import com.kingsrook.qbits.dbperformance.provider.SetupCheck;
+import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 import com.kingsrook.qqq.backend.core.actions.dashboard.widgets.AbstractWidgetRenderer;
 import com.kingsrook.qqq.backend.core.actions.tables.AggregateAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -378,16 +379,29 @@ public class DbPerfWidgetRenderer extends AbstractWidgetRenderer
     *******************************************************************************/
    public MultiTableData tables(DbPerformanceData data) throws QException
    {
-      List<QRecord> scans = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("seqScanShare", false)).withLimit(100));
+      QRecord settings = data.settings();
+      DbStatsProvider provider = settings == null || settings.getValueString("provider") == null ? null : DbStatsProviders.forProviderName(settings.getValueString("provider"));
       List<QRecord> growing = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("growthBytes7d", false)).withLimit(100));
+      TableData growth = table("Growth appears after table history has accumulated.", growing.stream()
+         .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Size MB", mb(row.getValue("totalBytes")),
+            "Growth MB (7 days)", mb(row.getValue("growthBytes7d")))).toList(),
+         "Table", "Size MB", "Growth MB (7 days)");
+      if(provider != null && !provider.features().contains(StatsFeature.TABLE_ACCESS))
+      {
+         //////////////////////////////////////////////////////////////////
+         // vendors without scan counters (H2) list rows and size instead //
+         //////////////////////////////////////////////////////////////////
+         List<QRecord> largest = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("nLiveTup", false)).withLimit(100));
+         return (new MultiTableData(List.of(table("Tables appear after the next table snapshot (normally hourly).", largest.stream()
+            .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Rows (estimate)", row.getValue("nLiveTup"),
+               "Size MB", mb(row.getValue("totalBytes")))).toList(),
+            "Table", "Rows (estimate)", "Size MB"), growth)));
+      }
+      List<QRecord> scans = DbPerfStore.query("db_perf_table_stat", data.backendFilter().withOrderBy(new QFilterOrderBy("seqScanShare", false)).withLimit(100));
       return (new MultiTableData(List.of(table("Table scans appear after the next table snapshot (normally hourly).", scans.stream()
             .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Sequential scans", row.getValue("seqScan"),
                "Index scans", row.getValue("idxScan"), "Sequential share %", row.getValue("seqScanShare"))).toList(),
-            "Table", "Sequential scans", "Index scans", "Sequential share %"),
-         table("Growth appears after table history has accumulated.", growing.stream()
-            .map(row -> map("Table", row.getValueString("schemaName") + "." + row.getValueString("tableName"), "Size MB", mb(row.getValue("totalBytes")),
-               "Growth MB (7 days)", mb(row.getValue("growthBytes7d")))).toList(),
-            "Table", "Size MB", "Growth MB (7 days)"))));
+            "Table", "Sequential scans", "Index scans", "Sequential share %"), growth)));
    }
 
 

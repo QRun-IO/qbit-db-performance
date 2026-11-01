@@ -443,8 +443,8 @@ public class SnapshotCollector
          QRecord row = new QRecord().withValue("backendName", backend).withValue("schemaName", entry.schemaName()).withValue("tableName", entry.tableName()).withValue("relid", entry.relid()).withValue("lastSeenAt", now);
          entry.counters().forEach(row::setValue);
          entry.maintenance().forEach(row::setValue);
-         row.withValue("deadRatio", ratio(number(row, "nDeadTup"), number(row, "nLiveTup") + number(row, "nDeadTup")))
-            .withValue("seqScanShare", ratio(number(row, "seqScan"), number(row, "seqScan") + number(row, "idxScan")));
+         row.withValue("deadRatio", entry.counters().containsKey("nDeadTup") ? ratio(number(row, "nDeadTup"), number(row, "nLiveTup") + number(row, "nDeadTup")) : null)
+            .withValue("seqScanShare", entry.counters().containsKey("seqScan") ? ratio(number(row, "seqScan"), number(row, "seqScan") + number(row, "idxScan")) : null);
          if(old == null)
          {
             inserts.add(row);
