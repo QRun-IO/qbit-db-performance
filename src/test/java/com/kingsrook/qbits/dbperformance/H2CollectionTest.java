@@ -45,6 +45,7 @@ import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaData;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 
 /*******************************************************************************
@@ -102,9 +103,11 @@ class H2CollectionTest
       assertThat(plan.mode()).isEqualTo("GENERIC");
       assertThat(plan.planJson()).isNull();
       assertThat(plan.planText()).containsIgnoringCase("h2_probe_name");
-      ExplainResult analyzed = explain.explain(new ExplainRequest(backend, null, "select * from h2_probe where name = $1", ExplainRequest.Mode.ANALYZE, List.of("secret-value")));
-      assertThat(analyzed.planText()).contains("scanCount");
-      assertThat(analyzed.assistantPrompt()).doesNotContain("secret-value").contains("database query plan");
+      assertThat(plan.assistantPrompt()).contains("database query plan");
+      assertThatThrownBy(() -> explain.explain(new ExplainRequest(backend, null, "select * from h2_probe where name = $1", ExplainRequest.Mode.ANALYZE, List.of("secret-value"))))
+         .hasMessageContaining("ANALYZE is not available");
+      assertThatThrownBy(() -> explain.explain(new ExplainRequest(backend, null, "select file_write('x', '/tmp/p') from h2_probe", ExplainRequest.Mode.PLAN, List.of())))
+         .hasMessageContaining("FILE_WRITE");
    }
 
 

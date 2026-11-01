@@ -821,7 +821,7 @@ entries:
 - key: process:dbPerfQueryPlan;slot:help
   summary: "Inspect the plan of one statement, with optional read-only execution."
   content: |
-    Choose PLAN (default) or ANALYZE. PLAN uses a generic plan for parameterized SQL on PostgreSQL 16+ and H2. H2 plans are text (index choice and scan counts) without a cost tree. ANALYZE requires explain analyze permission and exactly one SELECT with no modifying CTEs, INTO or row locks. Enter parameter values only for ANALYZE, one per line in placeholder order. Values are sent transiently; they and the ANALYZE plan are never stored. Every request is audited. Results include copyable plan text, cost, a SQL Workbench link and a literal-free assistant prompt. No model is called by this qbit.
+    Choose PLAN (default) or ANALYZE. PLAN uses a generic plan for parameterized SQL on PostgreSQL 16+ and H2. H2 plans are text (index choice and scan counts) without a cost tree; H2 refuses SQL naming side-effecting functions, DDL or aliases, and allows ANALYZE only for non-admin users. ANALYZE requires explain analyze permission and exactly one SELECT with no modifying CTEs, INTO or row locks. Enter parameter values only for ANALYZE, one per line in placeholder order. Values are sent transiently; they and the ANALYZE plan are never stored. Every request is audited. Results include copyable plan text, cost, a SQL Workbench link and a literal-free assistant prompt. No model is called by this qbit.
 - key: widget:dbPerfSetup;slot:label
   summary: "Check backend, statistics access, collection, attribution and scheduler setup."
 - key: widget:dbPerfDatabaseTime;slot:label

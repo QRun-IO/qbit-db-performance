@@ -42,6 +42,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import static com.kingsrook.qbits.dbperformance.provider.JdbcReads.instant;
 import static com.kingsrook.qbits.dbperformance.provider.JdbcReads.read;
 import static com.kingsrook.qbits.dbperformance.provider.JdbcReads.scalar;
@@ -62,6 +64,17 @@ public class H2StatsProvider implements DbStatsProvider
    private static final String NO_QUERY_STATISTICS = "NO_QUERY_STATISTICS";
    private static final String NOT_ADMIN = "NOT_ADMIN";
    private static final int MAX_ENTRIES = 1000;
+   private static final Pattern WORD = Pattern.compile("[A-Za-z_][A-Za-z0-9_$]*");
+
+   //////////////////////////////////////////////////////////////////////////
+   // H2 has no READ ONLY transaction and a rollback does not undo file,  //
+   // session, sequence or DDL side effects, so plans refuse SQL naming   //
+   // these (and any user-defined alias) outright                          //
+   //////////////////////////////////////////////////////////////////////////
+   private static final Set<String> DENIED = Set.of("FILE_WRITE", "FILE_READ", "CSVWRITE", "CSVREAD", "LINK_SCHEMA", "SCRIPT", "RUNSCRIPT",
+      "DISK_SPACE_USED", "CANCEL_SESSION", "ABORT_SESSION", "BACKUP", "SHUTDOWN", "CALL", "SET", "DROP", "CREATE", "ALTER", "TRUNCATE", "GRANT",
+      "REVOKE", "COMMIT", "ROLLBACK", "SAVEPOINT", "CHECKPOINT", "NEXTVAL", "SETVAL", "CURRVAL", "LOCK", "EXECUTE", "INSERT", "UPDATE",
+      "DELETE", "MERGE", "UPSERT", "REPLACE", "INTO", "FOR", "JAVA_OBJECT", "SLEEP");
 
    ///////////////////////////////////////////////////////////////////////////
    // statement that guarantees QUERY_STATISTICS has a row when it is on;   //
@@ -119,6 +132,14 @@ public class H2StatsProvider implements DbStatsProvider
       if(!admin)
       {
          available.remove(StatsFeature.BLOCKING);
+      }
+      else
+      {
+         ////////////////////////////////////////////////////////////////////
+         // an admin may call file and session functions; ANALYZE executes //
+         // the query, so it is offered only to non-admin users            //
+         ////////////////////////////////////////////////////////////////////
+         available.remove(StatsFeature.EXPLAIN_ANALYZE);
       }
       return (new ProviderCapabilities(true, version, statistics, admin, access, message, available));
    }
@@ -368,16 +389,45 @@ public class H2StatsProvider implements DbStatsProvider
 
 
    /*******************************************************************************
-    ** EXPLAIN (not executed) or EXPLAIN ANALYZE (executed with bound values) in
-    ** a transaction that is always rolled back; H2 reports index choice and
-    ** scan counts as text.
+    ** EXPLAIN (not executed) or EXPLAIN ANALYZE (executed with bound values).
+    ** H2 has no READ ONLY transaction, so both refuse more than one statement
+    ** and any SQL naming a side-effecting function, DDL/DML keyword or
+    ** user-defined alias; ANALYZE additionally requires a single SELECT/WITH
+    ** and a non-admin user. The connection is marked read-only (a hint in H2)
+    ** and the transaction always rolls back.
     *******************************************************************************/
    @Override
    public String explainText(Connection connection, String sql, List<String> parameters, boolean analyze, int timeoutMs) throws SQLException
    {
+      List<String> words = words(sql);
+      if(statements(sql) > 1)
+      {
+         throw (new SQLException("Query plans on H2 accept exactly one statement.", "42000"));
+      }
+      List<String> aliases = read(connection, "SELECT UPPER(ROUTINE_NAME) FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA <> 'INFORMATION_SCHEMA'", row -> row.getString(1));
+      for(String word : words)
+      {
+         if(DENIED.contains(word) || aliases.contains(word))
+         {
+            throw (new SQLException("Query plans on H2 refuse " + word + ": H2 cannot run it read-only.", "42000"));
+         }
+      }
+      if(analyze)
+      {
+         if(words.isEmpty() || !Set.of("SELECT", "WITH").contains(words.getFirst()))
+         {
+            throw (new SQLException("EXPLAIN ANALYZE on H2 accepts a single SELECT only.", "42000"));
+         }
+         if(admin(connection))
+         {
+            throw (new SQLException("EXPLAIN ANALYZE on H2 is disabled for admin users (it executes the query and H2 has no read-only transactions). Use PLAN, or connect as a non-admin user.", "42000"));
+         }
+      }
       boolean autoCommit = connection.getAutoCommit();
+      boolean readOnly = connection.isReadOnly();
       try
       {
+         connection.setReadOnly(true);
          connection.setAutoCommit(false);
          if(!analyze)
          {
@@ -409,8 +459,52 @@ public class H2StatsProvider implements DbStatsProvider
          finally
          {
             connection.setAutoCommit(autoCommit);
+            connection.setReadOnly(readOnly);
          }
       }
+   }
+
+
+
+   /*******************************************************************************
+    ** Upper-case words outside string literals and comments; double-quoted
+    ** identifiers count as words, since H2 resolves quoted function names.
+    *******************************************************************************/
+   static List<String> words(String sql)
+   {
+      String code = code(sql);
+      List<String> words = new ArrayList<>();
+      Matcher matcher = WORD.matcher(code);
+      while(matcher.find())
+      {
+         words.add(matcher.group().toUpperCase(Locale.ROOT));
+      }
+      return (words);
+   }
+
+
+
+   /*******************************************************************************
+    ** Statements separated by semicolons outside literals and comments.
+    *******************************************************************************/
+   static int statements(String sql)
+   {
+      int count = 0;
+      for(String part : code(sql).split(";"))
+      {
+         count += part.isBlank() ? 0 : 1;
+      }
+      return (count);
+   }
+
+
+
+   /*******************************************************************************
+    ** SQL with string literals and comments blanked, quoted identifiers unquoted.
+    *******************************************************************************/
+   private static String code(String sql)
+   {
+      return (sql.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("--[^\n]*", " ").replaceAll("'(?:[^']|'')*'", " ").replace('"', ' '));
    }
 
 

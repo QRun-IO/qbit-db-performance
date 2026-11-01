@@ -40,6 +40,7 @@ import com.kingsrook.qbits.dbperformance.collect.SnapshotCollector;
 import com.kingsrook.qbits.dbperformance.normalize.SqlNormalizer;
 import com.kingsrook.qbits.dbperformance.provider.DbStatsProvider;
 import com.kingsrook.qbits.dbperformance.provider.DbStatsProviders;
+import com.kingsrook.qbits.dbperformance.provider.ProviderCapabilities;
 import com.kingsrook.qbits.dbperformance.provider.StatsFeature;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
@@ -204,12 +205,28 @@ public class ExplainService
             // other vendors plan through their provider as text (no JSON) //
             //////////////////////////////////////////////////////////////////
             DbStatsProvider provider = DbStatsProviders.forConnection(connection);
-            if(!provider.features().contains(StatsFeature.EXPLAIN_TEXT) || analyze && !provider.features().contains(StatsFeature.EXPLAIN_ANALYZE)
-               || generic && !provider.features().contains(StatsFeature.EXPLAIN_GENERIC))
+            ProviderCapabilities capability = provider.capabilities(connection);
+            if(!capability.has(StatsFeature.EXPLAIN_TEXT) || generic && !capability.has(StatsFeature.EXPLAIN_GENERIC))
             {
                throw (new QBadRequestException("Query plans are not available for this database (" + provider.getName() + ")."));
             }
-            String text = provider.explainText(connection, parsed.indexedSql(), parameters, analyze, timeout);
+            if(analyze && !capability.has(StatsFeature.EXPLAIN_ANALYZE))
+            {
+               throw (new QBadRequestException("ANALYZE is not available on this " + provider.getName() + " connection (it would execute the query without a read-only transaction). Use PLAN."));
+            }
+            String text;
+            try
+            {
+               text = provider.explainText(connection, parsed.indexedSql(), parameters, analyze, timeout);
+            }
+            catch(java.sql.SQLException e)
+            {
+               if("42000".equals(e.getSQLState()) && e.getMessage() != null && e.getMessage().contains("H2"))
+               {
+                  throw (new QBadRequestException(e.getMessage()));
+               }
+               throw (e);
+            }
             return (new Explained(null, new PlanTextRenderer.Plan(text, PlanTextRenderer.redactText(text), null, null)));
          }
          return (new Explained(postgres(connection, parsed.sql(), parameters, analyze, generic, timeout), null).rendered());

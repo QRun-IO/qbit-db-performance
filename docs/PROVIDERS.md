@@ -33,9 +33,13 @@ S = supported, A = approximated, - = not available from the vendor.
 | Wait events | S | A | Blocked sessions report wait type `Lock` |
 | Transaction age | S | A | No transaction start in H2: an idle transaction's age is the time since it went idle (a lower bound) |
 | Connection counts | S | S | `SESSIONS` grouped by user, client info and state |
-| Plans | JSON tree with costs | Text | `EXPLAIN` / `EXPLAIN ANALYZE` (index choice, scan counts); generic plans keep `?n` unbound. H2 has no read-only transaction, so ANALYZE relies on the SELECT guard and rollback |
+| Plans | JSON tree with costs | Text | `EXPLAIN` / `EXPLAIN ANALYZE` (index choice, scan counts); generic plans keep `?n` unbound. ANALYZE only for non-admin users (see below) |
 
 Access codes saved on settings: PostgreSQL `FULL`, `NO_READ_ALL_STATS`, `NO_PG_STAT_STATEMENTS`, `UNSUPPORTED`; H2 `FULL`, `NOT_ADMIN`, `NO_QUERY_STATISTICS`, `UNSUPPORTED`. Health and the Setup panel ask the provider for the remedy text (`remedy`, `setupChecks`). **Enable statement statistics** on Settings calls `enableStatementStatistics`: H2 runs `SET QUERY_STATISTICS_MAX_ENTRIES 1000` and `SET QUERY_STATISTICS TRUE` (admin, until the database closes); PostgreSQL cannot do it at runtime.
+
+## H2 query plan rule
+
+H2 has no READ ONLY transaction and a rollback does not undo file, session, sequence or DDL side effects, so on H2 both PLAN and ANALYZE refuse more than one statement and any SQL that names a side-effecting function (`FILE_WRITE`, `FILE_READ`, `CSVWRITE`, `CSVREAD`, `LINK_SCHEMA`, `SCRIPT`, `RUNSCRIPT`, `DISK_SPACE_USED`, `CANCEL_SESSION`, `ABORT_SESSION`, `SLEEP`, sequences), a DDL/DML or session keyword, or any user-defined alias; quoted names count. ANALYZE executes the query, so it is offered only to non-admin H2 users (an admin can call file functions) and only for a single SELECT/WITH; capabilities report it as unavailable otherwise. The connection is marked read-only (a hint in H2) and the transaction always rolls back. A host whose H2 user is `sa` (an admin, as in the enterprise test server) therefore gets PLAN only.
 
 ## Adding a vendor
 

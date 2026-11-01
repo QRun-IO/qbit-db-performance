@@ -231,19 +231,43 @@ class H2StatsProviderTest
 
 
    /*******************************************************************************
-    ** EXPLAIN plans without executing, generic ?n slots, and EXPLAIN ANALYZE.
+    ** EXPLAIN plans without executing; ANALYZE only for a non-admin SELECT;
+    ** side-effecting functions, aliases, DDL and multiple statements refused.
     *******************************************************************************/
    @Test
    void explainText() throws Exception
    {
-      try(Connection connection = open(true, ";MODE=MySQL"))
+      String url = url(true, ";MODE=MySQL");
+      try(Connection connection = DriverManager.getConnection(url, "sa", ""))
       {
          activity(connection);
+         assertThat(provider.capabilities(connection).has(StatsFeature.EXPLAIN_ANALYZE)).isFalse();
+         assertThat(provider.capabilities(connection).has(StatsFeature.EXPLAIN_TEXT)).isTrue();
          assertThat(provider.explainText(connection, "SELECT * FROM orders WHERE status = 'NEW'", List.of(), false, 5000)).containsIgnoringCase("orders_status").doesNotContain("scanCount");
          assertThat(provider.explainText(connection, "SELECT * FROM orders WHERE customer_id = ?1", List.of(), false, 5000)).contains("?1");
-         assertThat(provider.explainText(connection, "SELECT * FROM orders WHERE customer_id = ?1", List.of("3"), true, 5000)).contains("scanCount");
          assertThat(connection.getAutoCommit()).isTrue();
+         assertThat(connection.isReadOnly()).isFalse();
+         assertThatThrownBy(() -> provider.explainText(connection, "SELECT * FROM orders WHERE customer_id = ?1", List.of("3"), true, 5000)).hasMessageContaining("admin");
+         assertThatThrownBy(() -> provider.explainText(connection, "SELECT FILE_WRITE('x', '/tmp/dbperf-h2-explain-probe') FROM orders", List.of(), false, 5000)).hasMessageContaining("FILE_WRITE");
+         assertThatThrownBy(() -> provider.explainText(connection, "SELECT \"file_write\"('x', '/tmp/p')", List.of(), false, 5000)).hasMessageContaining("FILE_WRITE");
+         assertThatThrownBy(() -> provider.explainText(connection, "DROP TABLE orders", List.of(), false, 5000)).hasMessageContaining("DROP");
+         assertThatThrownBy(() -> provider.explainText(connection, "SELECT 1; SELECT 2", List.of(), false, 5000)).hasMessageContaining("one statement");
+         assertThat(provider.explainText(connection, "SELECT 'drop; file_write' AS label FROM orders", List.of(), false, 5000)).containsIgnoringCase("orders");
+         try(Statement statement = connection.createStatement())
+         {
+            statement.execute("CREATE ALIAS my_side_effect FOR \"java.lang.System.nanoTime\"");
+            statement.execute("CREATE USER reader PASSWORD 'secret'");
+            statement.execute("GRANT SELECT ON orders TO reader");
+         }
+         assertThatThrownBy(() -> provider.explainText(connection, "SELECT my_side_effect() FROM orders", List.of(), false, 5000)).hasMessageContaining("MY_SIDE_EFFECT");
+         try(Connection reader = DriverManager.getConnection(url.replace(";DB_CLOSE_DELAY=-1", "").replace(";QUERY_STATISTICS=TRUE", ""), "reader", "secret"))
+         {
+            assertThat(provider.capabilities(reader).has(StatsFeature.EXPLAIN_ANALYZE)).isTrue();
+            assertThat(provider.explainText(reader, "SELECT * FROM orders WHERE customer_id = ?1", List.of("3"), true, 5000)).contains("scanCount");
+            assertThatThrownBy(() -> provider.explainText(reader, "VALUES (1)", List.of(), true, 5000)).hasMessageContaining("single SELECT");
+         }
       }
+      assertThat(java.nio.file.Files.exists(java.nio.file.Path.of("/tmp/dbperf-h2-explain-probe"))).isFalse();
    }
 
 
