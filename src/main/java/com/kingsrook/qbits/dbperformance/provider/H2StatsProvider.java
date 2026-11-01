@@ -170,8 +170,9 @@ public class H2StatsProvider implements DbStatsProvider
 
 
    /*******************************************************************************
-    ** QUERY_STATISTICS rows (times in milliseconds). H2 has no query id or user,
-    ** so the id is a stable hash of the statement text and the user is null.
+    ** QUERY_STATISTICS rows (times in milliseconds), without connection setup
+    ** (see {@link #excluded}). H2 has no query id or user, so the id is a stable
+    ** hash of the statement text and the user is null.
     *******************************************************************************/
    @Override
    public List<StatementStats> readStatements(Connection connection) throws SQLException
@@ -180,7 +181,7 @@ public class H2StatsProvider implements DbStatsProvider
       read(connection, "SELECT SQL_STATEMENT, EXECUTION_COUNT, CUMULATIVE_EXECUTION_TIME, AVERAGE_EXECUTION_TIME, MAX_EXECUTION_TIME, CUMULATIVE_ROW_COUNT FROM INFORMATION_SCHEMA.QUERY_STATISTICS", row ->
       {
          String sql = row.getString("SQL_STATEMENT");
-         if(sql != null && !PROBE.equals(sql) && !sql.toUpperCase(Locale.ROOT).contains("INFORMATION_SCHEMA."))
+         if(sql != null && !excluded(sql))
          {
             result.add(new StatementStats(hash(sql), null, true, sql, row.getLong("EXECUTION_COUNT"), millis(row.getDouble("CUMULATIVE_EXECUTION_TIME")),
                millis(row.getDouble("AVERAGE_EXECUTION_TIME")), millis(row.getDouble("MAX_EXECUTION_TIME")), row.getLong("CUMULATIVE_ROW_COUNT"), 0, 0, 0, null, null));
@@ -188,6 +189,20 @@ public class H2StatsProvider implements DbStatsProvider
          return (null);
       });
       return (result);
+   }
+
+
+
+   /*******************************************************************************
+    ** Not application statements: the collector's own probe and INFORMATION_SCHEMA
+    ** reads, and connection setup. H2 replays every JDBC URL setting as a SET on
+    ** each new connection and drivers call DATABASE() for the catalog, so with
+    ** unpooled connections these dominate the call counts without being work.
+    *******************************************************************************/
+   static boolean excluded(String sql)
+   {
+      String upper = sql.strip().toUpperCase(Locale.ROOT);
+      return (PROBE.equals(sql) || upper.contains("INFORMATION_SCHEMA.") || upper.startsWith("SET ") || upper.equals("CALL DATABASE()"));
    }
 
 
